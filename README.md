@@ -44,7 +44,7 @@ Settings in `.env` (see `.env.example`):
    - Round 2: worst-case ΔP is 16.0 kPa against the 15 kPa limit. The -0.02 mm cutter tolerance matters on 0.20 mm channels.
    - The design agent turns each finding into a sweep constraint and lands on 0.25/0.20 x 3.0 mm channels: 56.7 °C nominal (58.5 worst case), 5.3 kPa.
 5. **Process planning** builds a 9-op routing: gang-saw channels, FSW lid, post-weld skim, leak test. It runs 64 min/part at about $109/part.
-6. **Scheduling** books lots around the existing jobs and planned downtime (spindle service, FSW calibration, leak rig calibration). Delivery lands about 4 days before the deadline.
+6. **Scheduling** books lots around the existing jobs and planned downtime (spindle service, FSW calibration, leak rig calibration). Delivery lands a few days before the deadline (business-day shipping; exact slack depends on the day you run it).
 7. **QA** sets the inspection plan: 100% contact-face flatness on CMM, 6 bar proof test, pressure-decay hold time derived from internal volume, and flow and thermal (TTV) acceptance limits taken from the predictions.
 8. **Approve & release to cell.** The tentative bookings become real ones on the Gantt.
 

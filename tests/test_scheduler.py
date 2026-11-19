@@ -84,3 +84,21 @@ def test_db_roundtrip(tmp_path, monkeypatch):
     assert any(b["kind"] == "tentative" for b in db.bookings(include_tentative_for="J1"))
     assert not any(b["kind"] == "tentative" for b in db.bookings())
     assert db.commit_tentative("J1") == 1
+
+
+def test_demo_schedule_robust_to_wall_clock(tmp_path, monkeypatch):
+    """The demo is run on an unknown day/time: every start time over two weeks must deliver on time."""
+    import factory.db as db
+    from app.demo_specs import demo_specs
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "w.db")
+    monkeypatch.setattr(db, "_conn", None)
+    db.init(reseed=False)
+    spec = demo_specs()["hx1200"]["spec"]
+    ops = plan_process(dict(MICRO), spec["quantity"])["operations"]
+    start = datetime(2026, 11, 16, 0, 0)
+    for h in range(0, 14 * 24, 5):
+        now = start + timedelta(hours=h)
+        db.seed_factory(now)
+        r = schedule(ops, spec["quantity"], db.machines(), db.busy_for("X"), now, (now + timedelta(days=14)).date())
+        assert r["on_time"], (now, r["delivery_date"])
+        assert date.fromisoformat(r["delivery_date"]).weekday() < 5

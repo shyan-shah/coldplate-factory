@@ -53,9 +53,12 @@ def make_emit(job_id: str):
 async def startup() -> None:
     db.init(reseed=True)
     # Jobs interrupted by a restart can't resume mid-agent; mark them so the UI doesn't spin forever.
-    for j in db.list_jobs(200):
+    # Bookings are re-seeded, so jobs awaiting approval lose their tentative holds: mark them expired.
+    for j in db.list_jobs(500):
         if j["status"] == "running":
             db.update_job(j["id"], status="interrupted")
+        elif j["status"] == "awaiting_approval":
+            db.update_job(j["id"], status="expired")
 
 
 @app.get("/")

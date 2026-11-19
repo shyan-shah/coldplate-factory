@@ -262,7 +262,7 @@
   function tabDesign(b) {
     const ds = S.art.design_space, sel = S.art.design_selection;
     if (!ds) return emptyMsg(b, "The Thermal Design Agent's candidates and design-space sweeps will appear here.");
-    const rejected = S.verifs.filter(v => v.verdict !== "PASS").map(v => v.design_id);
+    const rejected = S.verifs.filter(v => v.agent_verdict !== "approve").map(v => v.design_id);
     const selected = sel ? sel.selected : null;
     b.innerHTML = `<h3 style="margin-top:0">Design space explored · case temperature vs pressure drop</h3>
       <div class="legend"><span><i style="background:#3987e5"></i>Sweep variant meeting constraints</span><span><i style="background:#5f5e58"></i>Sweep variant outside constraints</span>
@@ -300,8 +300,8 @@
   function tabVerif(b) {
     if (!S.verifs.length) return emptyMsg(b, "The Verification Agent's independent checks will appear here.");
     b.innerHTML = `<div class="note">Standard: ${fmtText(S.verifs[0].standard)}. The verifier re-runs every model from the parameter set and does not use the design agent's numbers.</div>`
-      + S.verifs.slice().reverse().map(v => `<div class="round ${v.verdict === "PASS" ? "" : "failed"}">
-      <div class="round-h"><span>Round ${v.round} · ${esc(v.design_id)}</span><span class="${v.verdict === "PASS" ? "pass" : "fail"}">${v.verdict === "PASS" ? "Approved" : "Rejected"}</span></div>
+      + S.verifs.slice().reverse().map(v => `<div class="round ${v.agent_verdict === "approve" ? "" : "failed"}">
+      <div class="round-h"><span>Round ${v.round} · ${esc(v.design_id)} · checks ${v.checks.filter(c => c.pass).length}/${v.checks.length}</span><span class="${v.agent_verdict === "approve" ? "pass" : "fail"}">${v.agent_verdict === "approve" ? "Approved" : "Rejected"}</span></div>${v.agent_verdict !== "approve" && v.verdict === "PASS" ? `<div class="note">${fmtText(v.summary)}</div>` : ""}
       <div class="cards">${card("Nominal", `${f(v.nominal.t_case_c)} °C`, `${f(v.nominal.dp_kpa, 2)} kPa`)}${card("Worst case", `${f(v.worst_case.t_case_c)} °C`, `${f(v.worst_case.dp_kpa, 2)} kPa · ${f(v.worst_case.velocity_m_s, 2)} m/s`)}</div>
       <table class="dt" style="margin-top:6px"><tr><th>Check</th><th class="num">Value</th><th class="num">Limit</th><th></th></tr>${v.checks.map(c =>
         `<tr class="${c.pass ? "" : "bad"}"><td>${fmtText(c.check)}${c.detail && !c.pass ? `<div style="color:var(--muted);font-size:11px">${fmtText(c.detail)}</div>` : ""}</td><td class="num">${c.value} ${fmtText(c.unit)}</td><td class="num">${c.limit}</td><td class="${c.pass ? "pass" : "fail"}">${c.pass ? "pass" : "fail"}</td></tr>`).join("")}</table>

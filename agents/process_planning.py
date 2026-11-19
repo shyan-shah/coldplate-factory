@@ -64,17 +64,21 @@ async def scripted(s: ScriptedSession) -> None:
     ops = p["operations"]
     slow = max(ops, key=lambda o: o["minutes"])
     st = p["minutes_per_part_by_station"]
+    n_machines = {"CNC": 2, "FSW": 1, "LEAK": 1}
+    load = {k: st.get(k, 0) / n for k, n in n_machines.items()}
+    neck = max(load, key=load.get)
     c = p["cost_per_part_usd"]
     await s.say(f"Cycle time {p['cycle_time_min_per_part']:.0f} min/part ({st.get('CNC', 0):.0f} CNC, {st.get('FSW', 0):.0f} FSW, "
                 f"{st.get('LEAK', 0):.0f} leak test). The longest single operation is op {slow['seq']} ({slow['operation'].split(':')[0]}, "
-                f"{slow['minutes']:.1f} min), and with two mills sharing the load, CNC is the bottleneck station. Cost "
+                f"{slow['minutes']:.1f} min). Per machine, {neck} carries the most load ({load[neck]:.1f} min/part"
+                f"{' split across 2 mills' if neck == 'CNC' else ''}), so {neck} is the bottleneck station. Cost "
                 f"${c['total']:.2f}/part (${c['material']:.2f} material), ${p['batch_cost_usd']:,.0f} for the batch. "
                 f"Stock: base blank {' x '.join(f'{v:g}' for v in p['stock']['base_blank_mm'])} mm. "
                 "FSW heat input can bow the contact face, so the post-weld skim (op 70) is sequenced after welding "
                 "on a vacuum fixture.")
     await s.tool("submit_process_plan", {
         "summary": f"{len(ops)} operations, {p['cycle_time_min_per_part']:.0f} min/part, ${c['total']:.2f}/part.",
-        "bottleneck": f"CNC ({st.get('CNC', 0):.0f} min/part across 2 mills); op {slow['seq']} longest single op.",
+        "bottleneck": f"{neck} ({load[neck]:.1f} min/part per machine); op {slow['seq']} is the longest single op.",
         "risks_and_controls": [
             "Fin lean/chatter during gang sawing -> climb cut, flood coolant, first-channel pin-gauge check",
             "Contact-face distortion from FSW -> weld before final skim (op 70), vacuum fixture, 100% flatness CMM",

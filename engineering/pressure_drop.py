@@ -54,7 +54,8 @@ def pin_bank_drag_coefficient(re: float, a: float, b: float) -> float:
         c = math.sqrt((a / 2.0) ** 2 + b**2)
     xi_lam = 280.0 * math.pi * ((b**0.5 - 0.6) ** 2 + 0.75) / ((4 * a * b - math.pi) * c**1.6) / re
     xi_turb = (2.5 + 1.2 / (a - 0.85) ** 1.08 + 0.4 * (b / a - 1) ** 3 - 0.01 * (a / b - 1) ** 3) * re**-0.25
-    return xi_lam + xi_turb * (1.0 - math.exp(-(re + 1000.0) / 2000.0))
+    # Staggered-bank transition factor (the in-line form uses (Re + 1000) / 2000).
+    return xi_lam + xi_turb * (1.0 - math.exp(-(re + 200.0) / 1000.0))
 
 
 def pin_bank_pressure_drop(re: float, a: float, b: float, n_rows: int, rho: float, v_max: float) -> float:

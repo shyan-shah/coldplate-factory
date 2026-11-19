@@ -16,14 +16,14 @@
   --critical: #d03b3b;
   /* categorical (dark steps) */
   --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181; --c6: #0ca30c; --c7: #9085e9; --c8: #e66767;
-  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
   --radius: 10px;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body {
   margin: 0; background: var(--page); color: var(--text);
-  font: 14px/1.45 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 h2 { font-size: 13px; font-weight: 600; letter-spacing: .02em; margin: 0; color: var(--text); }
@@ -88,6 +88,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .status-pill.running { background: var(--accent-soft); color: var(--text); }
 .status-pill.awaiting_approval { background: rgba(250,178,25,.15); color: var(--warning); }
 .status-pill.released { background: rgba(12,163,12,.15); color: #5fd35f; }
+.status-pill.expired, .status-pill.interrupted { background: var(--surface-3); color: var(--muted); }
 .status-pill.error, .status-pill.escalated, .status-pill.needs_clarification, .status-pill.returned { background: rgba(236,131,90,.15); color: var(--serious); }
 
 /* pipeline */
@@ -191,7 +192,7 @@ ul.plain { margin: 4px 0; padding-left: 18px; color: var(--text-2); font-size: 1
 
 /* charts */
 .chart { width: 100%; display: block; }
-.chart text { fill: var(--text-2); font-size: 10.5px; font-family: Inter, sans-serif; }
+.chart text { fill: var(--text-2); font-size: 10.5px; font-family: system-ui, "Segoe UI", sans-serif; }
 .chart .axis line, .chart .axis path { stroke: var(--border); }
 .chart .grid line { stroke: rgba(255,255,255,.05); }
 .chart .lim { stroke: var(--text-2); stroke-dasharray: 4 4; stroke-width: 1; }

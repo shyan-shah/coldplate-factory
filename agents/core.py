@@ -29,8 +29,9 @@ class Tool:
     artifact: Callable[["JobContext"], tuple[str, dict]] | None = None  # UI artifact refreshed after each call
 
     def api_def(self) -> dict:
-        d = {"name": self.name, "description": self.description, "input_schema": self.input_schema,
-             "eager_input_streaming": True}
+        # Tool inputs here are a few hundred bytes, so eager_input_streaming would buy no latency and would
+        # switch off server-side input validation (which `strict` on the submit tools relies on). Left off.
+        d = {"name": self.name, "description": self.description, "input_schema": self.input_schema}
         if self.terminal:
             d["strict"] = True
         return d

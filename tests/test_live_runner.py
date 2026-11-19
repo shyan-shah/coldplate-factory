@@ -108,7 +108,7 @@ def test_live_loop_tool_use_nudge_and_submit():
     assert mode == "beta" and kw["fallbacks"] == "default" and core.FALLBACK_BETA in kw["betas"]
     assert kw["thinking"]["type"] == "adaptive" and kw["output_config"] == {"effort": "low"}
     assert "temperature" not in kw and "tool_choice" not in kw
-    assert all(t.get("eager_input_streaming") for t in kw["tools"])
+    assert all(t.get("strict") for t in kw["tools"] if t["name"].startswith("submit_"))
     # second request carries the tool result back in a single user message
     msgs = client.calls[1][1]["messages"]
     assert msgs[-1]["role"] == "user" and msgs[-1]["content"][0]["type"] == "tool_result"

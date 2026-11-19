@@ -296,8 +296,8 @@ async def scripted(s: ScriptedSession) -> None:
         best = sw["best_by_case_temperature"][0]["params"]
         await s.say(f"Sweep {sw['sweep_id']}: {sw['evaluated']} variants, {sw['meeting_constraints']} within the dP limit. "
                     f"Coolest is {best['channel_width_mm']:.2f} mm channels / {best['fin_thickness_mm']:.2f} mm fins / "
-                    f"{best['channel_depth_mm']:.1f} mm deep. Narrower channels raise h faster than they raise dP while "
-                    "the flow stays laminar. Evaluating it formally.")
+                    f"{best['channel_depth_mm']:.1f} mm deep at {sw['best_by_case_temperature'][0]['dp_kpa']:.1f} kPa. In laminar flow h scales "
+                    "with 1/Dh, so the finest channels win thermally, and dP is still inside the limit here. Evaluating it formally.")
         chosen = await s.tool("evaluate_design", {"label": f"A2: Microchannel {best['channel_width_mm']:.2f}/"
                                                            f"{best['fin_thickness_mm']:.2f} x {best['channel_depth_mm']:.1f}",
                                                   "topology": "straight_microchannel", **best})

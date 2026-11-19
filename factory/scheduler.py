@@ -16,7 +16,7 @@ SETUP_MIN = {"CNC": 30.0, "FSW": 20.0, "LEAK": 10.0}
 FIRST_ARTICLE_MIN = 45.0          # extra on the first CNC lot (first-article inspection)
 RELEASE_LAG_H = 4.0               # CAM post + stock saw-cut after engineer release
 FINAL_INSPECTION_WORKING_DAYS = 1
-SHIPPING_DAYS = 2
+SHIPPING_DAYS = 2                 # business days in transit (ground)
 WINDOW_MIN = (SHIFT_END_H - SHIFT_START_H) * 60
 
 
@@ -131,7 +131,7 @@ def schedule(operations: list[dict], quantity: int, machines: list[dict], bookin
 
     complete = max(lots_done)
     ship = _add_working_days(complete, FINAL_INSPECTION_WORKING_DAYS)
-    delivery = (ship + timedelta(days=SHIPPING_DAYS)).date()
+    delivery = _add_working_days(ship, SHIPPING_DAYS).date()
     slack = (deadline - delivery).days
     util = {}
     span_h = (complete - release).total_seconds() / 3600
