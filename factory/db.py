@@ -75,8 +75,16 @@ def seed_factory(now: datetime | None = None) -> None:
         for m in MACHINES:
             c.execute("INSERT OR REPLACE INTO machines VALUES (?,?,?,?,?)", m)
 
+        workdays = []
+        d = day0
+        while len(workdays) < 12:
+            if d.weekday() < 5:
+                workdays.append(d)
+            d += timedelta(days=1)
+
         def at(days: int, hour: float) -> str:
-            return iso(day0 + timedelta(days=days, hours=hour))
+            """`days` counts working days from today (or the next working day)."""
+            return iso(workdays[days] + timedelta(hours=hour))
 
         seed = [
             ("CNC-1", "JOB-2291  Al 6061 manifold blocks x60", "job", at(0, 6), at(2, 14)),

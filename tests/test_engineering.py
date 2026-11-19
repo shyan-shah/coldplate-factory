@@ -234,3 +234,37 @@ def test_verification_detects_failures():
 
 def test_mass_flow():
     assert mass_flow("water", 25, 60.0) == pytest.approx(0.997, rel=0.01)
+
+
+# --- spec check ---------------------------------------------------------------------
+
+from datetime import date as _date  # noqa: E402
+
+from engineering.spec_check import validate_spec  # noqa: E402
+
+GOOD_SPEC = dict(tdp_w=1200, heat_source_length_mm=55, heat_source_width_mm=45, max_case_temp_c=60,
+                 coolant="PG25", inlet_temp_c=40, flow_rate_lpm=1.8, max_pressure_drop_kpa=15,
+                 quantity=40, deadline="2030-01-01")
+
+
+def test_spec_accepted_with_defaults_noted():
+    r = validate_spec(GOOD_SPEC, today=_date(2029, 12, 1))
+    assert r["accepted"]
+    assert r["normalized_spec"]["tim_resistance_cm2k_w"] == 0.08
+    assert r["derived"]["case_temp_floor_c"] < 60
+    assert any(i["severity"] == "info" for i in r["issues"])
+
+
+def test_spec_missing_and_infeasible():
+    s = {k: v for k, v in GOOD_SPEC.items() if k != "quantity"}
+    r = validate_spec(s, today=_date(2029, 12, 1))
+    assert not r["accepted"] and any(i["field"] == "quantity" for i in r["issues"])
+    r2 = validate_spec({**GOOD_SPEC, "flow_rate_lpm": 0.3, "max_case_temp_c": 55}, today=_date(2029, 12, 1))
+    assert not r2["accepted"]
+    assert any("Infeasible" in i["message"] for i in r2["issues"])
+
+
+def test_spec_bad_values():
+    r = validate_spec({**GOOD_SPEC, "coolant": "R134a", "deadline": "2020-01-01"}, today=_date(2029, 12, 1))
+    fields = {i["field"] for i in r["issues"] if i["severity"] == "error"}
+    assert {"coolant", "deadline"} <= fields
