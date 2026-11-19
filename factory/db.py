@@ -173,6 +173,13 @@ def bookings(machine_id: str | None = None, include_tentative_for: str | None = 
     return [dict(r) for r in conn().execute(q + " ORDER BY start", args).fetchall()]
 
 
+def busy_for(job_id: str) -> list[dict]:
+    """Everything that occupies the cell for scheduling `job_id`: jobs, downtime, other jobs' holds."""
+    rows = conn().execute("SELECT * FROM bookings WHERE NOT (kind = 'tentative' AND job_id = ?) ORDER BY start",
+                          (job_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
 def replace_tentative(job_id: str, items: list[dict]) -> None:
     with _lock:
         c = conn()

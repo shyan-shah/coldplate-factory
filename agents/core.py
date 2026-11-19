@@ -26,6 +26,7 @@ class Tool:
     input_schema: dict
     handler: Callable[["JobContext", dict], dict]
     terminal: bool = False          # a submit_* tool: a valid call ends the agent's turn
+    artifact: Callable[["JobContext"], tuple[str, dict]] | None = None  # UI artifact refreshed after each call
 
     def api_def(self) -> dict:
         d = {"name": self.name, "description": self.description, "input_schema": self.input_schema,
@@ -116,6 +117,8 @@ async def execute_tool(agent: AgentDef, ctx: JobContext, name: str, tool_input: 
         result, is_error, terminal_ok = {"error": f"internal tool error: {e}"}, True, False
     await ctx.emit("tool_result", agent.key, {"tool": name, "call_id": call_id, "output": compact(result),
                                               "is_error": is_error})
+    if not is_error and tool.artifact is not None:
+        await ctx.artifact(*tool.artifact(ctx))
     return result, is_error, terminal_ok
 
 

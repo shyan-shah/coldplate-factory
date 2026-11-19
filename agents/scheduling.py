@@ -24,7 +24,7 @@ The cell already has customer jobs and planned downtime booked.
 
 
 def _factory_state(ctx: JobContext, _inp: dict) -> dict:
-    bk = db.bookings()
+    bk = db.busy_for(ctx.job_id)
     by_m: dict = defaultdict(list)
     for b in bk:
         by_m[b["machine_id"]].append({"label": b["label"], "kind": b["kind"], "start": b["start"], "end": b["end"]})
@@ -39,7 +39,7 @@ def _schedule(ctx: JobContext, inp: dict) -> dict:
     lot = int(inp.get("lot_size", 10))
     if not 1 <= lot <= 100:
         raise ToolError("lot_size must be 1-100")
-    r = schedule(plan["operations"], int(ctx.spec["quantity"]), db.machines(), db.bookings(), datetime.now(),
+    r = schedule(plan["operations"], int(ctx.spec["quantity"]), db.machines(), db.busy_for(ctx.job_id), datetime.now(),
                  date.fromisoformat(str(ctx.spec["deadline"])), lot_size=lot,
                  allow_saturday=bool(inp.get("allow_saturday_overtime", False)))
     oid = ctx.next_id("O")

@@ -95,7 +95,7 @@ class Orchestrator:
 
             sc = await self._run(scheduling.AGENT)
             await ctx.artifact("schedule", {**ctx.outputs["schedule_result"], "summary": sc["summary"],
-                                            "board": db.bookings(include_tentative_for=ctx.job_id),
+                                            "board": db.busy_for(""),
                                             "machines": db.machines()})
             await self.handoff("scheduling", "qa", sc["summary"])
 

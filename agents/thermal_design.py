@@ -165,6 +165,17 @@ def _submit(ctx: JobContext, inp: dict) -> dict:
     return {"recorded": True, "selected": inp["selected_design_id"]}
 
 
+def design_space_artifact(ctx: JobContext) -> tuple[str, dict]:
+    t_max, dp_max = _limits(ctx)
+    return "design_space", {
+        "t_max": t_max, "dp_max": dp_max,
+        "candidates": [{k: v for k, v in c.items() if k != "full"} for c in ctx.artifacts.get("design_candidates", [])],
+        "points": [p for sw in ctx.artifacts.get("sweeps", []) for p in sw["points"]],
+        "sweeps": [{k: v for k, v in sw.items() if k != "points"} | {"n": len(sw["points"])}
+                   for sw in ctx.artifacts.get("sweeps", [])],
+    }
+
+
 TOOLS = [
     Tool("evaluate_design",
          "Evaluate one cold plate parameter set with the deterministic thermal/hydraulic models "
@@ -173,7 +184,7 @@ TOOLS = [
          "coolant temperature rise). Unspecified shared parameters use the defaults from the task. "
          "Returns a design_id plus case temperature, pressure drop, margins and breakdowns.",
          {"type": "object", "properties": DESIGN_PROPS, "required": ["label", "topology"],
-          "additionalProperties": False}, _evaluate),
+          "additionalProperties": False}, _evaluate, artifact=design_space_artifact),
     Tool("parametric_sweep",
          "Evaluate a grid of parameter combinations for one topology (max 400 combos) and return the best "
          "designs by case temperature that satisfy the constraints. Constraints are optional: "
@@ -187,7 +198,7 @@ TOOLS = [
               "constraints": {"type": "object", "properties": {
                   "max_dp_fraction": {"type": "number"}, "min_thermal_margin_c": {"type": "number"},
                   "max_depth_to_width": {"type": "number"}, "max_fin_height_to_thickness": {"type": "number"}}},
-              "top_n": {"type": "integer"}}}, _sweep),
+              "top_n": {"type": "integer"}}}, _sweep, artifact=design_space_artifact),
     Tool("submit_design", "Submit the selected design for verification. Ends your turn.",
          {"type": "object", "additionalProperties": False,
           "required": ["selected_design_id", "candidate_design_ids", "rationale", "response_to_verification"],
@@ -232,11 +243,24 @@ BASELINES = [
      "channel_width_mm": 0.30, "fin_thickness_mm": 0.25, "channel_depth_mm": 3.0},
     {"label": "B: Pin fin D1.5 staggered 3.0/2.6", "topology": "pin_fin", "pin_diameter_mm": 1.5,
      "pin_pitch_transverse_mm": 3.0, "pin_pitch_longitudinal_mm": 2.6, "channel_depth_mm": 3.0},
-    {"label": "C: Serpentine 4-path 2.0 x 3.0", "topology": "serpentine", "channel_width_mm": 2.0,
-     "fin_thickness_mm": 1.0, "parallel_paths": 4, "channel_depth_mm": 3.0},
+    {"label": "C: Serpentine 4-path 1.2 x 3.0", "topology": "serpentine", "channel_width_mm": 1.2,
+     "fin_thickness_mm": 0.8, "parallel_paths": 4, "channel_depth_mm": 3.0},
 ]
 MICRO_SWEEP = {"channel_width_mm": [0.20, 0.25, 0.30, 0.35], "fin_thickness_mm": [0.20, 0.25],
                "channel_depth_mm": [2.0, 2.5, 3.0]}
+
+
+def _cons_text(cons: dict) -> str:
+    parts = []
+    if cons.get("max_dp_fraction", 1.0) < 1.0:
+        parts.append(f"nominal dP <= {cons['max_dp_fraction']:.0%} of the limit")
+    if "max_depth_to_width" in cons:
+        parts.append(f"depth/width <= {cons['max_depth_to_width']:g}:1")
+    if "max_fin_height_to_thickness" in cons:
+        parts.append(f"fin height/thickness <= {cons['max_fin_height_to_thickness']:g}:1")
+    if "min_thermal_margin_c" in cons:
+        parts.append(f"nominal thermal margin >= {cons['min_thermal_margin_c']:g} degC")
+    return ", ".join(parts) or "nominal limits only"
 
 
 def _fmt(r: dict) -> str:
@@ -262,9 +286,10 @@ async def scripted(s: ScriptedSession) -> None:
             lines.append(f"{r['design_id']} {r['label'].split(':')[0]}: {_fmt(r)}, {r['regime']} Re {r['reynolds']:.0f} - {verdict}")
         await s.say("Results: " + "; ".join(lines) + ". "
                     f"The pin fin gets only {b['area_enhancement']:.1f}x area enhancement against "
-                    f"{a['area_enhancement']:.1f}x for the microchannels, so convection dominates its stack. The serpentine's "
-                    f"{c['velocity_m_s']:.1f} m/s puts it in {c['regime']} flow; it transfers heat well but burns pressure in the "
-                    f"bends ({c['dp_breakdown_kpa'].get('bends_180deg', 0):.1f} kPa). The microchannel is the only "
+                    f"{a['area_enhancement']:.1f}x for the microchannels, so convection dominates its stack. The serpentine runs "
+                    f"{c['regime']} at {c['velocity_m_s']:.1f} m/s and spends {c['dp_breakdown_kpa'].get('bends_180deg', 0):.1f} kPa "
+                    f"in the 180-degree bends alone, yet with only {c['area_enhancement']:.1f}x area it is still "
+                    f"{'too hot' if c['thermal_margin_c'] < 0 else 'marginal'}. The microchannel is the only "
                     "topology near budget, so I'm sweeping its geometry.")
         sw = await s.tool("parametric_sweep", {"topology": "straight_microchannel", "sweep": MICRO_SWEEP,
                                                "constraints": {"max_dp_fraction": 1.0}})
@@ -306,7 +331,7 @@ async def scripted(s: ScriptedSession) -> None:
     reasons = "; ".join(f"{i['check']} = {i['value']} vs limit {i['limit']}" for i in last["failures"])
     await s.say(f"Verification rejected the design: {reasons}. Fair. I optimised on nominal performance and left "
                 "no margin for what they check. Re-running the sweep with those findings turned into hard constraints: "
-                + json.dumps(cons) + ".")
+                + _cons_text(cons) + ".")
     sweep = {**MICRO_SWEEP, "channel_depth_mm": [2.0, 2.4, 2.5, 3.0, 3.5]}
     sw = await s.tool("parametric_sweep", {"topology": "straight_microchannel", "sweep": sweep, "constraints": cons})
     if not sw["best_by_case_temperature"]:
@@ -332,9 +357,10 @@ async def scripted(s: ScriptedSession) -> None:
     await s.tool("submit_design", {
         "selected_design_id": chosen["design_id"],
         "candidate_design_ids": sorted(ctx.designs),
-        "rationale": f"Best case temperature among designs satisfying all verification-derived constraints {cons}.",
-        "response_to_verification": "Addressed: " + reasons + f". New design {chosen['design_id']} was swept under "
-                                    f"constraints {cons}."})
+        "rationale": f"Coolest design ({_fmt(chosen)}) among the "
+                     f"variants that satisfy every verification-derived constraint: {_cons_text(cons)}.",
+        "response_to_verification": "Findings: " + reasons + f". Re-swept with {_cons_text(cons)}; "
+                                    f"{chosen['design_id']} is the best design inside those constraints."})
 
 
 AGENT = AgentDef("thermal_design", "Thermal Design Agent", "Proposes and optimises the cold plate", SYSTEM, TOOLS,

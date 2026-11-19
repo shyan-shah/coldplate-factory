@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cold Plate Agent Factory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="7" width="26" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 11v10M12 11v10M16 11v10M20 11v10M24 11v10" stroke="currentColor" stroke-width="1.6"/></svg>
+    <div>
+      <div class="brand-name">Cold Plate Agent Factory</div>
+      <div class="pitch">AI designs and manufactures the cooling for AI. Weeks become days.</div>
+    </div>
+  </div>
+  <div class="top-right">
+    <span id="mode-badge" class="badge">…</span>
+    <span id="clock" class="clock"></span>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- Left: request + history -->
+  <section class="col col-left">
+    <div class="panel">
+      <div class="panel-h"><h2>Customer request</h2>
+        <select id="demo-select" aria-label="Load a demo request"></select>
+      </div>
+      <form id="spec-form" class="spec-form" autocomplete="off"></form>
+      <div class="form-actions">
+        <select id="mode-select" aria-label="Agent mode">
+          <option value="">Mode: auto</option>
+          <option value="live">Live agents (Claude)</option>
+          <option value="scripted">Scripted replay</option>
+        </select>
+        <button id="submit-btn" class="btn primary" type="button">Submit to factory</button>
+      </div>
+    </div>
+    <div class="panel grow">
+      <div class="panel-h"><h2>Jobs</h2><button id="refresh-jobs" class="btn ghost small" type="button">Refresh</button></div>
+      <ul id="job-list" class="job-list"></ul>
+    </div>
+  </section>
+
+  <!-- Center: pipeline + live feed -->
+  <section class="col col-center">
+    <div class="panel pipeline-panel">
+      <div class="panel-h"><h2 id="job-title">No job running</h2><span id="job-status" class="status-pill idle">idle</span></div>
+      <div id="pipeline" class="pipeline"></div>
+      <div id="kpis" class="kpis"></div>
+    </div>
+    <div class="panel grow feed-panel">
+      <div class="panel-h"><h2>Agent activity</h2>
+        <label class="toggle"><input type="checkbox" id="show-thinking" checked> reasoning</label>
+        <label class="toggle"><input type="checkbox" id="autoscroll" checked> follow</label>
+      </div>
+      <div id="feed" class="feed" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- Right: artifacts -->
+  <section class="col col-right">
+    <div class="panel grow">
+      <nav id="tabs" class="tabs" role="tablist"></nav>
+      <div id="tab-body" class="tab-body"></div>
+    </div>
+  </section>
+</main>
+
+<div id="gate" class="gate hidden" role="dialog" aria-label="Engineer approval">
+  <div class="gate-inner">
+    <div class="gate-left">
+      <div class="gate-title"><span class="dot pulse"></span> Engineer approval required</div>
+      <div id="gate-summary" class="gate-summary"></div>
+    </div>
+    <div class="gate-actions">
+      <input id="gate-comment" placeholder="Comment (optional)" aria-label="Approval comment">
+      <button id="btn-return" class="btn ghost" type="button">Return to agents</button>
+      <button id="btn-approve" class="btn approve" type="button">Approve &amp; release to cell</button>
+    </div>
+  </div>
+</div>
+<div id="tooltip" class="tooltip hidden"></div>
+<script src="/static/charts.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
