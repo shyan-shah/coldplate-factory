@@ -10,5 +10,5 @@ if not exist .venv (
   .venv\Scripts\python -m pip install -q -r requirements.txt
 )
 if not exist .env copy .env.example .env >nul
-start "" /min cmd /c "timeout /t 4 /nobreak >nul & start http://localhost:%PORT%/"
+if not defined NO_BROWSER start "" /min cmd /c "timeout /t 4 /nobreak >nul & start http://localhost:%PORT%/"
 .venv\Scripts\python -m uvicorn app.main:app --port %PORT%
