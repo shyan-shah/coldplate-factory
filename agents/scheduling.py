@@ -1,4 +1,4 @@
-"""Scheduling agent: books the job onto the factory cell around existing work and downtime."""
+"""Scheduling agent: books the campaign onto the mock rigs, the cobot and partner labs."""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -10,43 +10,38 @@ from factory.scheduler import schedule
 from .common import GROUND_RULES
 from .core import AgentDef, JobContext, ScriptedSession, Tool, ToolError
 
-SYSTEM = f"""You are the Scheduling Agent at an autonomous cold plate factory. The cell: CNC-1, CNC-2,
-FSW-1, LEAK-1, running two shifts (06:00-22:00) Monday-Friday; CNCs can run Saturday on overtime.
-The cell already has customer jobs and planned downtime booked.
+SYSTEM = f"""You are the Scheduling Agent at Loopwerks. Rigs run unattended around the clock; the cobot loads,
+connects, disconnects and unloads parts only in the supervised window (06:00 to 22:00 Monday to Friday,
+optionally Saturday). Partner labs add shipping both ways. The lab already has mock work and planned
+downtime booked.
 
-1. Call get_factory_state to see machine bookings and downtime.
-2. Call schedule_job to generate schedule options (finite capacity, non-preemptive, lot-based flow
-   CNC -> FSW -> CNC post-weld -> leak test). Options can vary transfer lot size and Saturday overtime.
-3. Pick the option that meets the customer deadline at the lowest disruption/cost (overtime only if
-   needed), and hold it with submit_schedule. Bookings stay tentative until the engineer approves the job.
+1. Call get_lab_state to see resources, bookings and downtime.
+2. Call schedule_campaign to generate options (Saturday cobot handling on or off). Each option gives the
+   report due date (5 working days after the last test) against the customer's deadline.
+3. Pick the option that meets the deadline with the least extra supervision, and hold it with
+   submit_schedule. Bookings stay tentative until the engineer releases the campaign.
 
 {GROUND_RULES}"""
 
 
-def _factory_state(ctx: JobContext, _inp: dict) -> dict:
-    bk = db.busy_for(ctx.job_id)
-    by_m: dict = defaultdict(list)
-    for b in bk:
-        by_m[b["machine_id"]].append({"label": b["label"], "kind": b["kind"], "start": b["start"], "end": b["end"]})
-    return {"now": datetime.now().replace(microsecond=0).isoformat(), "machines": db.machines(),
-            "bookings": dict(by_m), "shift": "06:00-22:00 Mon-Fri; CNC Saturday overtime optional"}
+def _state(ctx: JobContext, _inp: dict) -> dict:
+    by: dict = defaultdict(list)
+    for b in db.busy_for(ctx.job_id):
+        by[b["machine_id"]].append({"label": b["label"], "kind": b["kind"], "start": b["start"], "end": b["end"]})
+    return {"now": datetime.now().replace(microsecond=0).isoformat(), "resources": db.machines(), "bookings": dict(by),
+            "rules": "Rigs 24/7 unattended; cobot handling 06:00-22:00 Mon-Fri (Saturday optional); CMM 09:00-17:00 "
+                     "weekdays; partner shipping 2 working days each way"}
 
 
 def _schedule(ctx: JobContext, inp: dict) -> dict:
-    plan = ctx.outputs.get("process_plan_result")
-    if not plan:
-        raise ToolError("No process plan available")
-    lot = int(inp.get("lot_size", 10))
-    if not 1 <= lot <= 100:
-        raise ToolError("lot_size must be 1-100")
-    r = schedule(plan["operations"], int(ctx.spec["quantity"]), db.machines(), db.busy_for(ctx.job_id), datetime.now(),
-                 date.fromisoformat(str(ctx.spec["deadline"])), lot_size=lot,
-                 allow_saturday=bool(inp.get("allow_saturday_overtime", False)))
+    p = ctx.outputs.get("procedure_result")
+    if not p:
+        raise ToolError("No procedure available")
+    r = schedule(p["operations"], db.machines(), db.busy_for(ctx.job_id), datetime.now(),
+                 date.fromisoformat(str(ctx.spec["deadline"])), allow_saturday=bool(inp.get("allow_saturday_handling")))
     oid = ctx.next_id("O")
     ctx.schedule_options[oid] = r
-    return {"option_id": oid, **{k: v for k, v in r.items() if k != "operations"},
-            "operations_count": len(r["operations"]),
-            "first_operation": r["operations"][0], "last_operation": r["operations"][-1]}
+    return {"option_id": oid, **{k: v for k, v in r.items() if k != "operations"}, "bookings": len(r["operations"])}
 
 
 def _submit(ctx: JobContext, inp: dict) -> dict:
@@ -58,18 +53,17 @@ def _submit(ctx: JobContext, inp: dict) -> dict:
                                        "start": o["start"], "end": o["end"]} for o in r["operations"]])
     ctx.outputs["scheduling"] = inp
     ctx.outputs["schedule_result"] = r
-    return {"held": True, "bookings": len(r["operations"]), "delivery_date": r["delivery_date"]}
+    return {"held": True, "bookings": len(r["operations"]), "report_due": r["report_due"]}
 
 
 TOOLS = [
-    Tool("get_factory_state", "List machines and all current bookings and downtime on the cell.",
-         {"type": "object", "properties": {}, "additionalProperties": False}, _factory_state),
-    Tool("schedule_job", "Compute a finite-capacity schedule option for this job (does not book it). "
-         "Returns option_id, delivery date vs deadline, slack, makespan and machine load.",
-         {"type": "object", "additionalProperties": False, "required": ["lot_size", "allow_saturday_overtime"],
-          "properties": {"lot_size": {"type": "integer", "description": "Transfer lot size (pieces), e.g. 10"},
-                         "allow_saturday_overtime": {"type": "boolean"}}}, _schedule),
-    Tool("submit_schedule", "Hold the chosen option as tentative bookings on the cell. Ends your turn.",
+    Tool("get_lab_state", "List lab resources and all current bookings and downtime.",
+         {"type": "object", "properties": {}, "additionalProperties": False}, _state),
+    Tool("schedule_campaign", "Compute a finite-capacity schedule option (does not book it). Returns option_id, last "
+         "test end, report due date vs deadline, slack, unattended rig hours and resource load.",
+         {"type": "object", "additionalProperties": False, "required": ["allow_saturday_handling"],
+          "properties": {"allow_saturday_handling": {"type": "boolean"}}}, _schedule),
+    Tool("submit_schedule", "Hold the chosen option as tentative bookings. Ends your turn.",
          {"type": "object", "additionalProperties": False, "required": ["option_id", "summary"],
           "properties": {"option_id": {"type": "string"}, "summary": {"type": "string"}}},
          _submit, terminal=True),
@@ -77,40 +71,35 @@ TOOLS = [
 
 
 def build_task(ctx: JobContext) -> str:
-    p = ctx.outputs["process_plan_result"]
-    return (f"Job {ctx.job_id}: {ctx.spec['quantity']} pcs, customer deadline {ctx.spec['deadline']}.\n"
-            f"Per-part minutes by station: {p['minutes_per_part_by_station']}. Schedule it.")
+    t = ctx.outputs["procedure_result"]["totals"]
+    return (f"Job {ctx.job_id}: report needed by {ctx.spec['deadline']}. Procedure totals: {t}. Schedule it.")
 
 
 async def scripted(s: ScriptedSession) -> None:
     ctx = s.ctx
-    await s.say(f"Loading the cell board. {ctx.spec['quantity']} pcs due {ctx.spec['deadline']}.")
-    st = await s.tool("get_factory_state", {})
+    await s.say(f"Loading the lab board. Report needed by {ctx.spec['deadline']}.")
+    st = await s.tool("get_lab_state", {})
     down = [f"{m}: {b['label']}" for m, bl in st["bookings"].items() for b in bl if b["kind"] == "downtime"]
     jobs = sum(1 for bl in st["bookings"].values() for b in bl if b["kind"] == "job")
-    await s.say(f"{jobs} existing job bookings and {len(down)} downtime windows on the cell ({'; '.join(down)}). "
-                "Trying lots of 10 on standard shifts first.")
-    a = await s.tool("schedule_job", {"lot_size": 10, "allow_saturday_overtime": False})
+    await s.say(f"{jobs} mock bookings and {len(down)} downtime windows ({'; '.join(down)}). Trying weekday cobot "
+                "handling only first.")
+    a = await s.tool("schedule_campaign", {"allow_saturday_handling": False})
     chosen = a
-    if not a["on_time"]:
-        await s.say(f"Option {a['option_id']} delivers {a['delivery_date']}, {-a['slack_days']} days late. Trying "
-                    "Saturday CNC overtime with smaller lots to pull it in.")
-        b = await s.tool("schedule_job", {"lot_size": 5, "allow_saturday_overtime": True})
-        chosen = b if b["delivery_date"] < a["delivery_date"] else a
-    else:
-        b = await s.tool("schedule_job", {"lot_size": 5, "allow_saturday_overtime": False})
-        if b["delivery_date"] < a["delivery_date"]:
-            chosen = b
-        await s.say(f"{a['option_id']} (lots of 10): delivery {a['delivery_date']}; {b['option_id']} (lots of 5): "
-                    f"{b['delivery_date']}. Smaller lots mean more setups but get the FSW and leak rig started sooner. "
-                    f"No overtime needed.")
-    await s.say(f"Holding {chosen['option_id']}: release {chosen['release'][:16].replace('T', ' ')}, production complete "
-                f"{chosen['production_complete'][:16].replace('T', ' ')}, ships {chosen['ship_date']}, delivered "
-                f"{chosen['delivery_date']}: {chosen['slack_days']} days of slack against the {chosen['deadline']} deadline. "
-                "Bookings are tentative until engineer sign-off.")
+    b = await s.tool("schedule_campaign", {"allow_saturday_handling": True})
+    gain = (date.fromisoformat(a["report_due"]) - date.fromisoformat(b["report_due"])).days
+    if not a["on_time"] and b["report_due"] < a["report_due"]:
+        chosen = b
+    await s.say(f"{a['option_id']} (weekdays): last test {a['last_test_end'][:16].replace('T', ' ')}, report due "
+                f"{a['report_due']}. {b['option_id']} (with Saturday handling) saves {gain} day(s). "
+                + ("Saturday handling isn't needed to make the deadline, so I'm holding the weekday option. "
+                   if chosen is a else "Saturday handling is needed to make the deadline. ")
+                + f"{chosen['unattended_rig_hours']} h of bench rig time falls outside the supervised window and runs "
+                  f"unattended; the cobot unloads at the next window. Makespan {chosen['makespan_days']} days, "
+                  f"{chosen['slack_days']} days of slack against the {chosen['deadline']} deadline. Partner labs drive the "
+                  "critical path. Bookings stay tentative until the engineer releases the campaign.")
     await s.tool("submit_schedule", {"option_id": chosen["option_id"],
-                                     "summary": f"Delivery {chosen['delivery_date']} vs deadline {chosen['deadline']} "
-                                                f"({chosen['slack_days']:+d} days), lots of {chosen['lot_size']}."})
+                                     "summary": f"Report due {chosen['report_due']} vs deadline {chosen['deadline']} "
+                                                f"({chosen['slack_days']:+d} days); {chosen['unattended_rig_hours']} h unattended."})
 
 
-AGENT = AgentDef("scheduling", "Scheduling Agent", "Books the factory cell", SYSTEM, TOOLS, build_task, scripted)
+AGENT = AgentDef("scheduling", "Scheduling Agent", "Books rigs and the cobot", SYSTEM, TOOLS, build_task, scripted)

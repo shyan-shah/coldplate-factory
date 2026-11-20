@@ -1,4 +1,4 @@
-"""Demo customer requests. Deadlines are relative to today so the demo never goes stale."""
+"""Demo test requests. All companies are fictional. Deadlines are relative to today so the demo never goes stale."""
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -7,29 +7,30 @@ from datetime import date, timedelta
 def demo_specs() -> dict[str, dict]:
     today = date.today()
     return {
-        "hx1200": {
-            "title": "HX-1200 accelerator, 1.2 kW (demo case)",
+        "cp1400": {
+            "title": "CP-1400 cold plate to OCP methods (demo case)",
             "spec": {
-                "customer": "Helios Compute (fictional)",
-                "part_name": "HX-1200 accelerator cold plate",
-                "tdp_w": 1200, "heat_source_length_mm": 55, "heat_source_width_mm": 45,
-                "max_case_temp_c": 60, "coolant": "PG25", "inlet_temp_c": 40, "flow_rate_lpm": 1.8,
-                "max_pressure_drop_kpa": 15, "quantity": 40,
-                "deadline": (today + timedelta(days=14)).isoformat(),
-                "tim_resistance_cm2k_w": 0.08, "max_operating_pressure_bar": 4.0, "material_preference": "copper",
-                "notes": "Rack loop has 8 plates in parallel per CDU branch, so the pressure-drop limit is firm. "
-                         "Plate must fit a 95 x 85 mm keep-out.",
+                "customer": "Northwind Thermal (fictional)",
+                "part_name": "CP-1400 single-phase cold plate",
+                "component_type": "cold_plate",
+                "target_standards": "OCP-CP-1.0",
+                "max_operating_pressure_bar": 5.0, "rated_flow_lpm": 1.5, "coolant": "PG25",
+                "design_heat_load_w": 1400, "port_inner_diameter_mm": 6.0,
+                "claimed_r_th_k_w": 0.020, "claimed_dp_kpa_at_rated": 12.0,
+                "samples": 5,
+                "deadline": (today + timedelta(days=56)).isoformat(),
+                "notes": "Second-source qualification for an integrator. Copper plate with skived fins, G1/4 ports. "
+                         "We want our own data before we pay for certification.",
             },
         },
         "bad": {
-            "title": "Incomplete / infeasible request",
+            "title": "QD to UL 4501 only, incomplete (demo)",
             "spec": {
-                "customer": "Contoso AI (fictional)", "part_name": "CX-1500 training module",
-                "tdp_w": 1500, "heat_source_length_mm": 60, "heat_source_width_mm": 50,
-                "max_case_temp_c": 52, "coolant": "PG25", "inlet_temp_c": 45, "flow_rate_lpm": 0.6,
-                "max_pressure_drop_kpa": 10,
-                "deadline": (today + timedelta(days=5)).isoformat(),
-                "notes": "Need ASAP. Quantity TBD.",
+                "customer": "Contoso Fluidics (fictional)", "part_name": "QD-08 quick disconnect pair",
+                "component_type": "quick_disconnect", "target_standards": "UL-4501",
+                "rated_flow_lpm": 8, "coolant": "PG25", "samples": 1,
+                "deadline": (today + timedelta(days=10)).isoformat(),
+                "notes": "Need a UL 4501 pass for a customer audit next month.",
             },
         },
     }

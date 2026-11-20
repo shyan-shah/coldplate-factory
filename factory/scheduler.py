@@ -1,50 +1,43 @@
-"""Deterministic finite-capacity scheduler for the cold plate cell.
+"""Deterministic finite-capacity scheduler for the test lab.
 
-Each transfer lot flows: CNC (base + lid) -> deburr -> FSW lid weld -> CNC post-weld skim
--> passivate -> leak test.  Operations are non-preemptive, must fit inside a staffed
-shift window, and may not overlap existing bookings or downtime on the machine.
-Lots are dispatched in order; the CNC step picks whichever mill finishes it first.
+Rigs run unattended around the clock. The cobot loads, connects, disconnects and unloads parts only inside
+the supervised window (06:00 to 22:00 Monday to Friday, optionally Saturday). A part that finishes overnight
+waits on its rig until the cobot can unload it. Each sample's tests run in sequence; different samples run
+in parallel. Partner-lab tests add shipping both ways. University metrology runs 09:00 to 17:00 on weekdays.
 """
 from __future__ import annotations
 
-import math
 from datetime import date, datetime, timedelta
 
-SHIFT_START_H = 6
-SHIFT_END_H = 22
-SETUP_MIN = {"CNC": 30.0, "FSW": 20.0, "LEAK": 10.0}
-FIRST_ARTICLE_MIN = 45.0          # extra on the first CNC lot (first-article inspection)
-RELEASE_LAG_H = 4.0               # CAM post + stock saw-cut after engineer release
-FINAL_INSPECTION_WORKING_DAYS = 1
-SHIPPING_DAYS = 2                 # business days in transit (ground)
-WINDOW_MIN = (SHIFT_END_H - SHIFT_START_H) * 60
+SUPERVISED = (6, 22)
+METROLOGY = (9, 17)
+RELEASE_LAG_H = 4.0                 # kit prep after the engineer releases the campaign
+REPORT_WORKING_DAYS = 5             # report within 5 working days of the last test (pilot promise)
 
 
-def _is_working_day(d: datetime, saturday: bool) -> bool:
-    wd = d.weekday()
-    return wd < 5 or (wd == 5 and saturday)
+def _working(d: datetime, saturday: bool) -> bool:
+    return d.weekday() < 5 or (d.weekday() == 5 and saturday)
 
 
-def _window(t: datetime, saturday: bool) -> tuple[datetime, datetime]:
-    """Working window containing t, or the next one after t."""
+def _window(t: datetime, hours: tuple[int, int], saturday: bool) -> tuple[datetime, datetime]:
     day = t.replace(hour=0, minute=0, second=0, microsecond=0)
     while True:
-        if _is_working_day(day, saturday):
-            ws, we = day.replace(hour=SHIFT_START_H), day.replace(hour=SHIFT_END_H)
+        if _working(day, saturday):
+            ws, we = day.replace(hour=hours[0]), day.replace(hour=hours[1])
             if t < we:
                 return max(ws, t), we
         day += timedelta(days=1)
         t = day
 
 
-def earliest_slot(busy: list[tuple[datetime, datetime]], ready: datetime, minutes: float,
-                  saturday: bool) -> datetime:
-    if minutes > WINDOW_MIN:
-        raise ValueError(f"operation of {minutes:.0f} min cannot fit in one {WINDOW_MIN} min shift window")
-    dur = timedelta(minutes=minutes)
-    t = ready
-    for _ in range(10000):
-        start, wend = _window(t, saturday)
+def windowed_slot(busy: list[tuple[datetime, datetime]], ready: datetime, minutes: float,
+                  hours: tuple[int, int], saturday: bool) -> datetime:
+    """Earliest start >= ready that fits in one working window and avoids `busy`."""
+    if minutes > (hours[1] - hours[0]) * 60:
+        raise ValueError(f"{minutes:.0f} min cannot fit in one {hours} window")
+    dur, t = timedelta(minutes=minutes), ready
+    for _ in range(20000):
+        start, wend = _window(t, hours, saturday)
         end = start + dur
         if end > wend:
             t = wend
@@ -57,100 +50,100 @@ def earliest_slot(busy: list[tuple[datetime, datetime]], ready: datetime, minute
     raise RuntimeError("no slot found")
 
 
-def _add_working_days(t: datetime, n: int, saturday: bool = False) -> datetime:
+def free_from(busy: list[tuple[datetime, datetime]], start: datetime, end: datetime) -> datetime | None:
+    """None if [start, end) is free, else the end of the first clash."""
+    clash = next(((s, e) for s, e in busy if s < end and e > start), None)
+    return None if clash is None else clash[1]
+
+
+def add_working_days(t: datetime, n: int) -> datetime:
     d = t
     while n > 0:
         d += timedelta(days=1)
-        if _is_working_day(d, saturday):
+        if d.weekday() < 5:
             n -= 1
-    return d.replace(hour=SHIFT_END_H, minute=0, second=0, microsecond=0)
+    return d
 
 
-def split_minutes(operations: list[dict]) -> dict:
-    """Per-part minutes for each routed step from a process plan's operation list."""
-    pre = sum(o["minutes"] for o in operations if o["station"] == "CNC" and o["seq"] < 60)
-    post = sum(o["minutes"] for o in operations if o["station"] == "CNC" and o["seq"] > 60)
-    fsw = sum(o["minutes"] for o in operations if o["station"] == "FSW")
-    leak = sum(o["minutes"] for o in operations if o["station"] == "LEAK")
-    bench_pre = sum(o["minutes"] for o in operations if o["station"] == "BENCH" and o["seq"] < 60)
-    bench_post = sum(o["minutes"] for o in operations if o["station"] == "BENCH" and o["seq"] > 60)
-    return {"cnc_pre": pre, "cnc_post": post, "fsw": fsw, "leak": leak,
-            "bench_pre": bench_pre, "bench_post": bench_post}
-
-
-def schedule(operations: list[dict], quantity: int, machines: list[dict], bookings: list[dict],
-             now: datetime, deadline: date, lot_size: int = 10, allow_saturday: bool = False) -> dict:
-    m = split_minutes(operations)
-    # Keep every lot inside one shift window on the longest step.
-    max_per_part = max(m["cnc_pre"], m["cnc_post"], m["fsw"], m["leak"])
-    max_lot = max(1, int((WINDOW_MIN - SETUP_MIN["CNC"] - FIRST_ARTICLE_MIN) // max_per_part))
-    lot_size = max(1, min(lot_size, max_lot, quantity))
-    n_lots = math.ceil(quantity / lot_size)
-
-    by_station: dict[str, list[dict]] = {}
-    for mc in machines:
-        by_station.setdefault(mc["station"], []).append(mc)
-    busy: dict[str, list[tuple[datetime, datetime]]] = {mc["id"]: [] for mc in machines}
+def schedule(operations: list[dict], resources: list[dict], bookings: list[dict], now: datetime, deadline: date,
+             allow_saturday: bool = False) -> dict:
+    busy: dict[str, list[tuple[datetime, datetime]]] = {r["id"]: [] for r in resources}
     for b in bookings:
         if b["machine_id"] in busy:
             busy[b["machine_id"]].append((datetime.fromisoformat(b["start"]), datetime.fromisoformat(b["end"])))
     for v in busy.values():
         v.sort()
 
-    release = (now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1 + RELEASE_LAG_H))
-    ops: list[dict] = []
+    release = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1 + RELEASE_LAG_H)
+    queues: dict[str, list[dict]] = {}
+    for op in operations:
+        queues.setdefault(op["sample_id"], []).append(op)
+    ready = {sid: release for sid in queues}
+    booked: list[dict] = []
+    unattended_min = 0.0
 
-    def book(station: str, ready: datetime, minutes: float, label: str, lot: int, step: str) -> datetime:
-        best = None
-        for mc in by_station[station]:
-            sat = allow_saturday and bool(mc["saturday"])
-            s = earliest_slot(busy[mc["id"]], ready, minutes, sat)
-            e = s + timedelta(minutes=minutes)
-            if best is None or e < best[2]:
-                best = (mc["id"], s, e)
-        mid, s, e = best
-        busy[mid].append((s, e))
-        busy[mid].sort()
-        ops.append({"machine_id": mid, "lot": lot, "step": step, "label": label,
-                    "start": s.isoformat(), "end": e.isoformat(), "minutes": round(minutes, 1)})
-        return e
+    def put(res: str, s: datetime, e: datetime, op: dict, label: str, step: str) -> None:
+        busy[res].append((s, e))
+        busy[res].sort()
+        booked.append({"machine_id": res, "step_id": op["step_id"], "sample_id": op["sample_id"], "step": step,
+                       "label": label, "start": s.isoformat(), "end": e.isoformat(),
+                       "minutes": round((e - s).total_seconds() / 60, 1)})
 
-    lots_done: list[datetime] = []
-    for i in range(n_lots):
-        q = min(lot_size, quantity - i * lot_size)
-        lot = i + 1
-        fa = FIRST_ARTICLE_MIN if i == 0 else 0.0
-        t = book("CNC", release, SETUP_MIN["CNC"] + fa + q * m["cnc_pre"],
-                 f"Lot {lot} ({q} pcs) base + lid machining", lot, "machining")
-        t += timedelta(minutes=q * m["bench_pre"])
-        t = book("FSW", t, SETUP_MIN["FSW"] + q * m["fsw"], f"Lot {lot} lid FSW", lot, "fsw")
-        t = book("CNC", t, SETUP_MIN["CNC"] + q * m["cnc_post"], f"Lot {lot} post-weld skim + holes", lot, "post_weld")
-        t += timedelta(minutes=q * m["bench_post"])
-        t = book("LEAK", t, SETUP_MIN["LEAK"] + q * m["leak"], f"Lot {lot} proof + leak test", lot, "leak_test")
-        lots_done.append(t)
+    while any(queues.values()):
+        sid = min((k for k, q in queues.items() if q), key=lambda k: (ready[k], k))
+        op = queues[sid].pop(0)
+        res, t0 = op["resource"], ready[sid]
+        tag = f"{op['step_id']} {op['sample_id']} {op['name']}"
+        if op["kind"] in ("bench", "hired"):
+            hin, hout, run = op["handling_in_min"], op["handling_out_min"], op["run_min"]
+            t = t0
+            for _ in range(5000):
+                s = windowed_slot(busy["COBOT-1"], t, hin, SUPERVISED, allow_saturday)
+                run_end = s + timedelta(minutes=hin + run)
+                u = windowed_slot(busy["COBOT-1"], run_end, hout, SUPERVISED, allow_saturday)
+                end = u + timedelta(minutes=hout)
+                clash = free_from(busy[res], s, end)
+                if clash is None:
+                    break
+                t = clash
+            else:
+                raise RuntimeError(f"cannot place {op['step_id']}")
+            put("COBOT-1", s, s + timedelta(minutes=hin), op, f"{op['step_id']} load + connect {op['sample_id']}", "handling")
+            put(res, s, end, op, tag, "test")
+            put("COBOT-1", u, end, op, f"{op['step_id']} disconnect + unload {op['sample_id']}", "handling")
+            # unattended rig time outside the supervised window
+            cur = s + timedelta(minutes=hin)
+            while cur < run_end:
+                nxt = min(run_end, cur + timedelta(minutes=30))
+                if not (_working(cur, allow_saturday) and SUPERVISED[0] <= cur.hour < SUPERVISED[1]):
+                    unattended_min += (nxt - cur).total_seconds() / 60
+                cur = nxt
+            ready[sid] = end
+        elif op["kind"] == "metrology":
+            s = windowed_slot(busy[res], t0, op["run_min"], METROLOGY, False)
+            end = s + timedelta(minutes=op["run_min"])
+            put(res, s, end, op, tag, "test")
+            ready[sid] = end
+        else:  # partner: ship out, run continuously, ship back
+            t = add_working_days(t0, op["transit_working_days"]).replace(hour=9, minute=0, second=0, microsecond=0)
+            dur = timedelta(minutes=op["run_min"])
+            while (c := free_from(busy[res], t, t + dur)) is not None:
+                t = c
+            put(res, t, t + dur, op, tag + " (partner)", "partner")
+            ready[sid] = add_working_days(t + dur, op["transit_working_days"]).replace(hour=9, minute=0)
 
-    complete = max(lots_done)
-    ship = _add_working_days(complete, FINAL_INSPECTION_WORKING_DAYS)
-    delivery = _add_working_days(ship, SHIPPING_DAYS).date()
-    slack = (deadline - delivery).days
-    util = {}
-    span_h = (complete - release).total_seconds() / 3600
-    for mid in busy:
-        mins = sum(o["minutes"] for o in ops if o["machine_id"] == mid)
-        util[mid] = {"job_hours": round(mins / 60, 2)}
+    last = max(datetime.fromisoformat(b["end"]) for b in booked)
+    report_due = add_working_days(last, REPORT_WORKING_DAYS).date()
+    slack = (deadline - report_due).days
+    load = {}
+    for r in busy:
+        mins = sum(b["minutes"] for b in booked if b["machine_id"] == r)
+        if mins:
+            load[r] = round(mins / 60, 1)
     return {
-        "release": release.isoformat(),
-        "production_complete": complete.isoformat(),
-        "ship_date": ship.date().isoformat(),
-        "delivery_date": delivery.isoformat(),
-        "deadline": deadline.isoformat(),
-        "slack_days": slack,
-        "on_time": slack >= 0,
-        "lot_size": lot_size,
-        "lots": n_lots,
-        "allow_saturday_overtime": allow_saturday,
-        "makespan_hours": round(span_h, 1),
-        "per_part_minutes": {k: round(v, 2) for k, v in m.items()},
-        "operations": ops,
-        "machine_load": util,
+        "release": release.isoformat(), "last_test_end": last.isoformat(), "report_due": report_due.isoformat(),
+        "deadline": deadline.isoformat(), "slack_days": slack, "on_time": slack >= 0,
+        "allow_saturday_handling": allow_saturday, "makespan_days": round((last - release).total_seconds() / 86400, 1),
+        "unattended_rig_hours": round(unattended_min / 60, 1),
+        "operations": booked, "resource_hours": load,
     }

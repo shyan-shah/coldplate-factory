@@ -1,4 +1,4 @@
-"""SQLite persistence: jobs, event log, factory machines and bookings."""
+"""SQLite persistence: jobs, event log, lab resources (rigs, cobot, partners) and bookings."""
 from __future__ import annotations
 
 import json
@@ -32,12 +32,10 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS ix_events_job ON events(job_id, id);
 """
 
-MACHINES = [
-    ("CNC-1", "CNC-1  Haas VF-2SS", "CNC", "3-axis VMC, 12k rpm, 4th-axis ready", 1),
-    ("CNC-2", "CNC-2  DMG Mori DMU 50", "CNC", "5-axis, 20k rpm, probing", 1),
-    ("FSW-1", "FSW-1  Stirweld head on gantry", "FSW", "Friction-stir welding, 2.5D, 15 kN", 0),
-    ("LEAK-1", "LEAK-1  Pressure-decay leak rig", "LEAK", "Proof + pressure decay, N2, 0-16 bar", 0),
-]
+from testlab.methods import RESOURCES  # noqa: E402
+
+# (id, name, station/kind, description, saturday-capable)
+MACHINES = [(r[0], r[1], r[2], r[3], 1 if r[2] == "cobot" else 0) for r in RESOURCES]
 
 
 def connect() -> sqlite3.Connection:
@@ -86,17 +84,16 @@ def seed_factory(now: datetime | None = None) -> None:
             """`days` counts working days from today (or the next working day)."""
             return iso(workdays[days] + timedelta(hours=hour))
 
-        seed = [
-            ("CNC-1", "JOB-2291  Al 6061 manifold blocks x60", "job", at(0, 6), at(2, 14)),
-            ("CNC-1", "JOB-2295  Cu busbar clamps x200", "job", at(2, 14), at(4, 12)),
-            ("CNC-2", "JOB-2288  5-axis impeller housings x12", "job", at(0, 6), at(1, 13)),
-            ("CNC-2", "Spindle bearing service (planned)", "downtime", at(1, 13), at(1, 22)),
-            ("CNC-2", "JOB-2297  Cu cold plate rework x8", "job", at(2, 6), at(2, 18)),
-            ("FSW-1", "JOB-2291  manifold lid welds", "job", at(2, 15), at(3, 12)),
-            ("FSW-1", "FSW tool change + weld calibration coupons", "downtime", at(4, 6), at(4, 12)),
-            ("FSW-1", "JOB-2297  rework welds", "job", at(3, 12), at(3, 18)),
-            ("LEAK-1", "JOB-2291  leak test", "job", at(3, 13), at(3, 21)),
-            ("LEAK-1", "Annual calibration (external)", "downtime", at(5, 6), at(5, 14)),
+        seed = [  # mock workload so the board is realistic; every label says it is demo data
+            ("JIG-1", "M-07 QD connect/disconnect cycling (demo data)", "job", at(0, 6), at(1, 20)),
+            ("FLOW-1", "Reference plate check, flow loop (planned)", "downtime", at(0, 8), at(0, 13)),
+            ("LEAK-1", "M-06 pressure decay, 3 samples (demo data)", "job", at(0, 9), at(0, 15)),
+            ("COBOT-1", "Cobot calibration and gripper service (planned)", "downtime", at(1, 6), at(1, 10)),
+            ("HE-1", "Helium detector not yet on site (hire starts)", "downtime", at(0, 0), at(1, 12)),
+            ("HYDRO-1", "Pump service and gauge check (planned)", "downtime", at(2, 6), at(2, 11)),
+            ("THERM-1", "M-06 thermal resistance (demo data)", "job", at(1, 8), at(1, 16)),
+            ("ENV-P", "Partner chamber booked by others (demo data)", "job", at(2, 0), at(7, 0)),
+            ("CMM-UNI", "University teaching use (demo data)", "job", at(3, 9), at(3, 17)),
         ]
         for m, label, kind, s, e in seed:
             c.execute("INSERT INTO bookings (machine_id, job_id, label, kind, start, end, seeded) "

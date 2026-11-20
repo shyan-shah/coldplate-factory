@@ -31,24 +31,30 @@ def _run(db, key):
 
 
 def test_demo_case_reaches_gate_with_rejection(fresh_db):
-    ctx, events = _run(fresh_db, "hx1200")
+    ctx, events = _run(fresh_db, "cp1400")
     types = [e[0] for e in events]
     assert "error" not in types, [e for e in events if e[0] == "error"]
     assert types[-1] == "gate"
-    assert types.count("rejection") >= 1
+    assert types.count("rejection") == 1
     pkg = events[-1][2]["package"]
-    assert pkg["t_case_c"] <= pkg["limits"]["max_case_c"]
-    assert pkg["worst_case"]["t_case_c"] <= pkg["limits"]["max_case_c"]
-    assert pkg["worst_case"]["dp_kpa"] <= pkg["limits"]["max_dp_kpa"]
+    assert pkg["coverage"] == {"covered": 18, "total": 18}
+    assert pkg["verification_rounds"] == 2 and pkg["campaigns_drafted"] == 2
+    assert pkg["samples_used"] <= pkg["samples_supplied"]
     assert pkg["slack_days"] >= 0
-    # every agent ran, in order
+    assert pkg["dry_run_counts"]["FAIL"] == 1 and pkg["dry_run_counts"]["PENDING"] >= 1
     started = [e[1] for e in events if e[0] == "agent_started"]
-    assert started[0] == "intake" and started[-1] == "qa"
-    assert {"thermal_design", "verification", "process_planning", "scheduling"} <= set(started)
-    assert any(b["kind"] == "tentative" for b in fresh_db.bookings(include_tentative_for="JT"))
+    assert started[0] == "intake" and started[-1] == "report"
+    assert {"planner", "verification", "procedure", "scheduling"} <= set(started)
+    kinds = {e[2]["kind"] for e in events if e[0] == "artifact"}
+    assert {"spec_check", "campaigns", "campaign_selection", "verification", "procedure", "schedule", "report",
+            "job_package"} <= kinds
+    rep = next(e[2]["data"] for e in events if e[0] == "artifact" and e[2]["kind"] == "report")
+    assert "SIMULATED" in rep["markdown"]
+    held = fresh_db.bookings(include_tentative_for="JT")
+    assert any(b["kind"] == "tentative" and b["machine_id"] == "COBOT-1" for b in held)
 
 
-def test_bad_spec_stops_at_intake(fresh_db):
+def test_bad_request_stops_at_intake(fresh_db):
     ctx, events = _run(fresh_db, "bad")
     assert events[-1][0] == "job_status" and events[-1][2]["status"] == "needs_clarification"
-    assert not any(e[0] == "agent_started" and e[1] == "thermal_design" for e in events)
+    assert not any(e[0] == "agent_started" and e[1] == "planner" for e in events)

@@ -1,18 +1,19 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-GB">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cold Plate Agent Factory</title>
+<title>Loopwerks · autonomous test lab (demo)</title>
+<link rel="icon" href="/static/favicon.png">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
-    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="7" width="26" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 11v10M12 11v10M16 11v10M20 11v10M24 11v10" stroke="currentColor" stroke-width="1.6"/></svg>
+    <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><path d="M39 12 H40 A12 12 0 0 1 52 24 V40 A12 12 0 0 1 40 52 H24 A12 12 0 0 1 12 40 V24 A12 12 0 0 1 24 12 H22" fill="none" stroke="#5CC6D6" stroke-width="6"/><path d="M30 12 L21 4.5 V19.5 Z" fill="#5CC6D6"/><circle cx="37.5" cy="12" r="5" fill="#E59A2E"/></svg>
     <div>
-      <div class="brand-name">Cold Plate Agent Factory</div>
-      <div class="pitch">AI designs and manufactures the cooling for AI. Weeks become days.</div>
+      <div class="brand-name">loopwerks <span class="sub">test lab · demo</span></div>
+      <div class="pitch">Agents plan the campaign from the standard. Robots run it. Results feed back. Rigs are mock; results are simulated.</div>
     </div>
   </div>
   <div class="top-right">
@@ -25,7 +26,7 @@
   <!-- Left: request + history -->
   <section class="col col-left">
     <div class="panel">
-      <div class="panel-h"><h2>Customer request</h2>
+      <div class="panel-h"><h2>Test request</h2>
         <select id="demo-select" aria-label="Load a demo request"></select>
       </div>
       <form id="spec-form" class="spec-form" autocomplete="off"></form>
@@ -35,7 +36,7 @@
           <option value="live">Live agents (Claude)</option>
           <option value="scripted">Scripted replay</option>
         </select>
-        <button id="submit-btn" class="btn primary" type="button">Submit to factory</button>
+        <button id="submit-btn" class="btn primary" type="button">Submit to lab</button>
       </div>
     </div>
     <div class="panel grow">
@@ -72,13 +73,13 @@
 <div id="gate" class="gate hidden" role="dialog" aria-label="Engineer approval">
   <div class="gate-inner">
     <div class="gate-left">
-      <div class="gate-title"><span class="dot pulse"></span> Engineer approval required</div>
+      <div class="gate-title"><span class="dot pulse"></span> Engineer release required</div>
       <div id="gate-summary" class="gate-summary"></div>
     </div>
     <div class="gate-actions">
       <input id="gate-comment" placeholder="Comment (optional)" aria-label="Approval comment">
       <button id="btn-return" class="btn ghost" type="button">Return to agents</button>
-      <button id="btn-approve" class="btn approve" type="button">Approve &amp; release to cell</button>
+      <button id="btn-approve" class="btn approve" type="button">Release campaign to lab</button>
     </div>
   </div>
 </div>

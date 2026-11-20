@@ -1,4 +1,4 @@
-"""FastAPI app: job API, WebSocket event stream, engineer approval gate, static UI."""
+"""FastAPI app for the Loopwerks test-lab demo: job API, WebSocket event stream, engineer release gate, static UI."""
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect  # noqa: E402
-from fastapi.responses import FileResponse  # noqa: E402
+from fastapi.responses import FileResponse, PlainTextResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
@@ -26,7 +26,7 @@ from .demo_specs import demo_specs  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 STATIC = Path(__file__).resolve().parent / "static"
-app = FastAPI(title="Cold plate agent factory")
+app = FastAPI(title="Loopwerks test lab (demo)")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 _subscribers: set[asyncio.Queue] = set()
@@ -87,7 +87,7 @@ async def create_job(req: JobRequest):
     if mode == "live" and not os.environ.get("ANTHROPIC_API_KEY"):
         raise HTTPException(400, "Live mode needs ANTHROPIC_API_KEY in .env")
     job_id = "J-" + uuid.uuid4().hex[:6].upper()
-    title = req.spec.get("part_name") or "Cold plate request"
+    title = req.spec.get("part_name") or "Test request"
     db.create_job(job_id, title, req.spec, mode)
     ctx = JobContext(job_id=job_id, raw_spec=req.spec, emit_fn=make_emit(job_id), mode=mode)
     _tasks[job_id] = asyncio.create_task(Orchestrator(ctx).run())
@@ -133,6 +133,15 @@ async def reject(job_id: str, d: Decision):
     db.update_job(job_id, status="returned")
     await make_emit(job_id)("returned", "engineer", {"engineer": d.engineer, "comment": d.comment})
     return {"status": "returned"}
+
+
+@app.get("/api/jobs/{job_id}/report.md")
+async def report_md(job_id: str):
+    arts = [e for e in db.get_events(job_id) if e["type"] == "artifact" and e["payload"]["kind"] == "report"]
+    if not arts:
+        raise HTTPException(404, "no report for this job yet")
+    return PlainTextResponse(arts[-1]["payload"]["data"]["markdown"], media_type="text/markdown",
+                             headers={"Content-Disposition": f'attachment; filename="{job_id}-report.md"'})
 
 
 @app.get("/api/factory")

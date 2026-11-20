@@ -69,7 +69,7 @@ class JobContext:
     emit_fn: Emit
     mode: str
     spec: dict = field(default_factory=dict)          # normalized spec (after intake)
-    designs: dict = field(default_factory=dict)       # design_id -> {"params", "result", "label"}
+    campaigns: dict = field(default_factory=dict)     # campaign_id -> built campaign
     schedule_options: dict = field(default_factory=dict)
     outputs: dict = field(default_factory=dict)       # agent key -> submitted output
     artifacts: dict = field(default_factory=dict)     # deterministic artifacts for the UI

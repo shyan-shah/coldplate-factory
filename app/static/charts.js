@@ -141,10 +141,10 @@
     container.innerHTML = "";
     const W = Math.max(container.clientWidth, 420), rowH = 42, m = { l: 74, r: 12, t: 30, b: 10 };
     const H = m.t + machines.length * rowH + m.b;
-    const svg = el("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Factory cell schedule" }, container);
+    const svg = el("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Lab schedule" }, container);
     const defs = el("defs", {}, svg);
     const pat = el("pattern", { id: "hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
-    el("rect", { width: 6, height: 6, fill: "#2a1c16" }, pat); el("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "#ec835a", "stroke-width": 2 }, pat);
+    el("rect", { width: 6, height: 6, fill: "#2a1c16" }, pat); el("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "#E59A2E", "stroke-width": 2 }, pat);
     const t0 = new Date(); t0.setHours(0, 0, 0, 0);
     const ends = bookings.map(b => new Date(b.end).getTime());
     const dl = deadline ? new Date(deadline + "T23:59:59").getTime() : 0;
@@ -169,9 +169,9 @@
         const s = new Date(b.start).getTime(), e = new Date(b.end).getTime();
         const x = fx(Math.max(s, t0.getTime())), w = Math.max(fx(e) - x - 1, 2);
         const mine = b.job_id === jobId && (b.kind === "tentative" || b.kind === "job");
-        const fill = b.kind === "downtime" ? "url(#hatch)" : mine ? "#3987e5" : "#3b3b37";
+        const fill = b.kind === "downtime" ? "url(#hatch)" : mine ? "#5CC6D6" : "#2E4B5A";
         const r = el("rect", { x, y: y + 7, width: w, height: rowH - 14, rx: 2, fill, opacity: mine && !committed ? 0.85 : 1 }, svg);
-        const kind = b.kind === "downtime" ? "Downtime" : mine ? (committed ? "This job (booked)" : "This job (tentative hold)") : "Existing job";
+        const kind = b.kind === "downtime" ? "Downtime" : mine ? (committed ? "This job (booked)" : "This job (tentative hold)") : "Other work (demo data)";
         r.addEventListener("mousemove", ev => showTip(`<b>${esc(b.label)}</b>` + row("Type", kind) + row("Machine", mc.id)
           + row("Start", new Date(s).toLocaleString([], { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }))
           + row("End", new Date(e).toLocaleString([], { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })), ev));
@@ -183,11 +183,11 @@
       el("line", { x1: x, x2: x, y1: m.t - 2, y2: H - m.b, stroke: color, "stroke-width": 2, "stroke-dasharray": "4 3" }, svg);
       const t = el("text", { x: x + 3, y: H - m.b - 4, "font-weight": 600 }, svg); t.textContent = label; t.setAttribute("fill", color);
     };
-    mark(delivery, "delivery", "#5fd35f");
-    mark(deadline, "deadline", "#fab219");
+    mark(delivery, "report due", "#3FA66B");
+    mark(deadline, "deadline", "#E59A2E");
     const leg = document.createElement("div"); leg.className = "legend";
-    leg.innerHTML = `<span><i style="background:#3987e5"></i>This job</span><span><i style="background:#3b3b37"></i>Existing jobs</span>
-      <span><i style="background:repeating-linear-gradient(45deg,#ec835a 0 2px,#2a1c16 2px 5px)"></i>Planned downtime</span><span>Shifts 06:00–22:00 Mon–Fri</span>`;
+    leg.innerHTML = `<span><i style="background:#5CC6D6"></i>This campaign</span><span><i style="background:#2E4B5A"></i>Other work (demo data)</span>
+      <span><i style="background:repeating-linear-gradient(45deg,#ec835a 0 2px,#2a1c16 2px 5px)"></i>Planned downtime</span><span>Rigs 24/7 · cobot 06:00 to 22:00 Monday to Friday · partner labs not contracted</span>`;
     container.appendChild(leg);
   }
 

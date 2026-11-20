@@ -1,5 +1,5 @@
-"""Orchestrator: runs the agent pipeline, handles the verification rejection loop, and stops at the
-engineer approval gate.  All artifacts shown to the engineer are assembled from tool outputs."""
+"""Orchestrator: runs the test-lab agent pipeline, handles the verification rejection loop, and stops at the
+engineer approval gate before anything runs. All artifacts shown to the engineer are assembled from tool outputs."""
 from __future__ import annotations
 
 import logging
@@ -8,13 +8,15 @@ import traceback
 
 from factory import db
 
-from . import intake, thermal_design, verification, process_planning, scheduling, qa
-from .common import get_design
+from testlab.report import report_markdown
+
+from . import intake, planner, verification, procedure, scheduling, report
+from .common import get_campaign
 from .core import AgentDef, JobContext, LiveRunner, run_scripted, model_name
 
 log = logging.getLogger("orchestrator")
 
-PIPELINE = [intake.AGENT, thermal_design.AGENT, verification.AGENT, process_planning.AGENT, scheduling.AGENT, qa.AGENT]
+PIPELINE = [intake.AGENT, planner.AGENT, verification.AGENT, procedure.AGENT, scheduling.AGENT, report.AGENT]
 AGENTS = {a.key: a for a in PIPELINE}
 MAX_REWORK = 3
 
@@ -59,49 +61,47 @@ class Orchestrator:
                 await ctx.emit("job_status", None, {"status": "needs_clarification",
                                                     "message": "Returned to customer for clarification"})
                 return
-            await self.handoff("intake", "thermal_design", out["summary"])
+            await self.handoff("intake", "planner", out["summary"])
 
             for round_ in range(1, MAX_REWORK + 2):
-                td = await self._run(thermal_design.AGENT)
-                sel = td["selected_design_id"]
-                await ctx.artifact("design_selection", {
-                    "round": round_, "selected": sel, "rationale": td["rationale"],
-                    "response_to_verification": td["response_to_verification"],
-                    "candidates": [{k: v for k, v in c.items() if k != "full"} for c in ctx.artifacts["design_candidates"]],
-                    "selected_full": get_design(ctx, sel)["result"]})
-                await self.handoff("thermal_design", "verification", f"{sel} submitted for verification (round {round_})")
+                pl = await self._run(planner.AGENT)
+                cid = pl["campaign_id"]
+                await ctx.artifact("campaign_selection", {
+                    "round": round_, "selected": cid, "rationale": pl["rationale"],
+                    "response_to_verification": pl["response_to_verification"], "campaign": get_campaign(ctx, cid)})
+                await self.handoff("planner", "verification", f"{cid} submitted for verification (round {round_})")
                 vr = await self._run(verification.AGENT)
                 v = ctx.outputs["last_verification"]
                 await ctx.artifact("verification", {**v, "round": round_, "agent_verdict": vr["verdict"],
                                                     "summary": vr["summary"], "required_changes": vr["required_changes"]})
                 if vr["verdict"] == "approve":
                     break
-                ctx.verification_feedback.append({"design_id": sel, "failures": v["failures"],
+                ctx.verification_feedback.append({"campaign_id": cid, "failures": v["failures"],
                                                   "summary": vr["summary"], "required_changes": vr["required_changes"]})
-                await ctx.emit("rejection", "verification", {"from": "verification", "to": "thermal_design",
-                                                             "design_id": sel, "round": round_,
+                await ctx.emit("rejection", "verification", {"from": "verification", "to": "planner",
+                                                             "campaign_id": cid, "round": round_,
                                                              "failures": v["failures"],
                                                              "required_changes": vr["required_changes"]})
                 if round_ > MAX_REWORK:
                     db.update_job(ctx.job_id, status="escalated", state=self.state())
                     await ctx.emit("job_status", None, {"status": "escalated",
-                                                        "message": "Design could not pass verification; escalated to engineer"})
+                                                        "message": "Campaign could not pass verification; escalated to engineer"})
                     return
-            await self.handoff("verification", "process_planning", ctx.outputs["verification"]["summary"])
+            await self.handoff("verification", "procedure", ctx.outputs["verification"]["summary"])
 
-            pp = await self._run(process_planning.AGENT)
-            await ctx.artifact("process_plan", {**ctx.outputs["process_plan_result"], "review": pp})
-            await self.handoff("process_planning", "scheduling", pp["summary"])
+            pr = await self._run(procedure.AGENT)
+            await ctx.artifact("procedure", {**ctx.outputs["procedure_result"], "review": pr})
+            await self.handoff("procedure", "scheduling", pr["summary"])
 
             sc = await self._run(scheduling.AGENT)
             await ctx.artifact("schedule", {**ctx.outputs["schedule_result"], "summary": sc["summary"],
-                                            "board": db.busy_for(""),
-                                            "machines": db.machines()})
-            await self.handoff("scheduling", "qa", sc["summary"])
+                                            "board": db.busy_for(""), "machines": db.machines()})
+            await self.handoff("scheduling", "report", sc["summary"])
 
-            qo = await self._run(qa.AGENT)
-            await ctx.artifact("qa_plan", {**ctx.outputs["qa_result"], "review": qo})
-            await self.handoff("qa", "engineer", "Job package complete, awaiting engineer approval")
+            ro = await self._run(report.AGENT)
+            rep = ctx.outputs["report_result"]
+            await ctx.artifact("report", {**rep, "review": ro, "markdown": report_markdown(rep)})
+            await self.handoff("report", "engineer", "Campaign package complete, awaiting engineer release")
 
             await ctx.artifact("job_package", self.package())
             db.update_job(ctx.job_id, status="awaiting_approval", state=self.state())
@@ -113,25 +113,28 @@ class Orchestrator:
 
     def package(self) -> dict:
         ctx = self.ctx
-        sel = ctx.outputs["thermal_design"]["selected_design_id"]
-        d = get_design(ctx, sel)
-        r, sch, pp = d["result"], ctx.outputs["schedule_result"], ctx.outputs["process_plan_result"]
-        v = ctx.outputs["last_verification"]
+        cid = ctx.outputs["planner"]["campaign_id"]
+        c = get_campaign(ctx, cid)
+        v, sch, pr = ctx.outputs["last_verification"], ctx.outputs["schedule_result"], ctx.outputs["procedure_result"]
+        rep = ctx.outputs["report_result"]
         return {
             "job_id": ctx.job_id, "customer": ctx.spec.get("customer"), "part_name": ctx.spec.get("part_name"),
-            "design_id": sel, "design_params": d["params"], "label": d["label"],
-            "t_case_c": r["thermal"]["t_case_c"], "dp_kpa": r["hydraulics"]["dp_kpa"],
-            "worst_case": v["worst_case"], "r_case_to_inlet_k_w": r["thermal"]["r_case_to_inlet_k_w"],
-            "limits": {"max_case_c": ctx.spec["max_case_temp_c"], "max_dp_kpa": ctx.spec["max_pressure_drop_kpa"]},
+            "component_type": ctx.spec.get("component_type"), "standard": c["standard"],
+            "campaign_id": cid, "label": c["label"], "steps": c["totals"]["steps"],
+            "samples_used": c["totals"]["samples_used"], "samples_supplied": ctx.spec["samples"],
+            "coverage": v["coverage"], "checks_passed": f"{sum(x['pass'] for x in v['checks'])}/{len(v['checks'])}",
             "verification_rounds": len(ctx.verification_feedback) + 1,
-            "cost_per_part_usd": pp["cost_per_part_usd"]["total"], "batch_cost_usd": pp["batch_cost_usd"],
-            "cycle_time_min": pp["cycle_time_min_per_part"],
-            "delivery_date": sch["delivery_date"], "deadline": sch["deadline"], "slack_days": sch["slack_days"],
-            "quantity": ctx.spec["quantity"], "designs_evaluated": len(ctx.designs),
-            "sweep_variants": sum(len(s["points"]) for s in ctx.artifacts.get("sweeps", [])),
+            "bench_hours": pr["totals"]["bench_hours"], "partner_hours": pr["totals"]["partner_hours"],
+            "cobot_handling_events": pr["totals"]["cobot_handling_events"],
+            "cost_excl_partner_gbp": pr["cost_estimate_gbp"]["total_excl_partner"],
+            "release": sch["release"], "last_test_end": sch["last_test_end"], "report_due": sch["report_due"],
+            "deadline": sch["deadline"], "slack_days": sch["slack_days"],
+            "unattended_rig_hours": sch["unattended_rig_hours"],
+            "dry_run_counts": rep["counts"], "flagged": rep["flagged"],
+            "campaigns_drafted": len(ctx.campaigns),
         }
 
     def state(self) -> dict:
-        return {"outputs": self.ctx.outputs, "designs": {k: {"params": v["params"], "label": v["label"]}
-                                                         for k, v in self.ctx.designs.items()},
+        return {"outputs": self.ctx.outputs, "campaigns": {k: {"label": v["label"], "totals": v["totals"]}
+                                                           for k, v in self.ctx.campaigns.items()},
                 "artifact_kinds": list(self.ctx.artifacts)}

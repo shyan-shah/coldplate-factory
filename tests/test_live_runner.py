@@ -79,7 +79,7 @@ class FakeClient:
 def _ctx(events):
     async def emit(t, a, p, persist=True):
         events.append((t, a, p))
-    return JobContext(job_id="T", raw_spec=demo_specs()["hx1200"]["spec"], emit_fn=emit, mode="live")
+    return JobContext(job_id="T", raw_spec=demo_specs()["cp1400"]["spec"], emit_fn=emit, mode="live")
 
 
 SCRIPT = [

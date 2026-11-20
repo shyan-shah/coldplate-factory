@@ -41,4 +41,4 @@ async def main(key: str) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main(sys.argv[1] if len(sys.argv) > 1 else "hx1200"))
+    asyncio.run(main(sys.argv[1] if len(sys.argv) > 1 else "cp1400"))

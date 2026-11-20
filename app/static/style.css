@@ -1,29 +1,33 @@
+@font-face { font-family: "Space Grotesk"; font-weight: 600; font-display: swap; src: url(fonts/space-grotesk-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 400; font-display: swap; src: url(fonts/inter-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 600; font-display: swap; src: url(fonts/inter-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-display: swap; src: url(fonts/ibm-plex-mono-latin-400-normal.woff2) format("woff2"); }
 :root {
   color-scheme: dark;
-  --page: #0d0d0d;
-  --surface: #1a1a19;
-  --surface-2: #222220;
-  --surface-3: #2a2a27;
-  --border: #33332f;
-  --text: #f0efec;
-  --text-2: #c3c2b7;
-  --muted: #8d8c82;
-  --accent: #3987e5;
-  --accent-soft: rgba(57, 135, 229, 0.16);
-  --good: #0ca30c;
-  --warning: #fab219;
-  --serious: #ec835a;
-  --critical: #d03b3b;
-  /* categorical (dark steps) */
-  --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181; --c6: #0ca30c; --c7: #9085e9; --c8: #e66767;
-  --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
-  --radius: 10px;
+  /* Loopwerks brand (brand/BRAND.md): Ink, Slate, Loop Light, Signal, Mist */
+  --page: #0D1B24;
+  --surface: #122631;
+  --surface-2: #16303D;
+  --surface-3: #1D3B4A;
+  --border: #24485A;
+  --text: #F5F4EF;
+  --text-2: #D9DDDF;
+  --muted: #9AA8B0;
+  --accent: #5CC6D6;
+  --accent-soft: rgba(92, 198, 214, 0.16);
+  --good: #3FA66B;
+  --warning: #E59A2E;
+  --serious: #E59A2E;
+  --critical: #E5675C;
+  --c1: #5CC6D6; --c2: #E59A2E; --c3: #3FA66B; --c4: #8FB8C9; --c5: #C98BB9; --c6: #3FA66B; --c7: #9A9CEB; --c8: #E5675C;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --radius: 8px;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body {
   margin: 0; background: var(--page); color: var(--text);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 14px/1.45 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 h2 { font-size: 13px; font-weight: 600; letter-spacing: .02em; margin: 0; color: var(--text); }
@@ -36,7 +40,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--border); background: var(--surface); }
 .brand { display: flex; align-items: center; gap: 12px; }
 .logo { width: 30px; height: 30px; color: var(--accent); }
-.brand-name { font-weight: 700; font-size: 15px; }
+.brand-name { font: 600 18px "Space Grotesk", Inter, sans-serif; letter-spacing: -0.01em; }
+.brand-name .sub { font: 400 12px var(--mono); color: var(--muted); margin-left: 6px; }
 .pitch { color: var(--text-2); font-size: 12.5px; }
 .top-right { display: flex; gap: 12px; align-items: center; }
 .badge { font-family: var(--mono); font-size: 11.5px; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--border);
@@ -217,3 +222,16 @@ ul.plain { margin: 4px 0; padding-left: 18px; color: var(--text-2); font-size: 1
 .gate.done { border-color: var(--good); background: #13200f; }
 
 body.gated .layout { padding-bottom: 104px; }
+
+/* test lab additions */
+.lanes { display: grid; gap: 6px; }
+.lane { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 11.5px; }
+.lane > .mono { width: 28px; color: var(--muted); }
+.chip { padding: 2px 7px; border-radius: 4px; background: var(--accent-soft); border: 1px solid var(--accent); white-space: nowrap; }
+.chip.hired { border-color: #9A9CEB; background: rgba(154,156,235,.15); }
+.chip.metrology { border-color: #8A969D; background: rgba(138,150,157,.15); }
+.chip.partner { border-color: var(--warning); background: rgba(229,154,46,.12); }
+.chip.destr { border-style: dashed; color: var(--critical); }
+.arr { color: var(--muted); }
+.sim-banner { border: 1px dashed var(--warning); color: var(--warning); background: rgba(229,154,46,.08); padding: 8px 10px; border-radius: 6px; font: 12px var(--mono); margin-bottom: 10px; }
+.warn { color: var(--warning); }

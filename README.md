@@ -1,10 +1,23 @@
-# Cold Plate Agent Factory (demo)
+# Loopwerks test lab (demo)
 
-> AI designs and manufactures the cooling for AI. Weeks become days.
+> Autonomous test labs for hardware that has to be qualified before it ships. Agents plan the work, robots execute it, results feed back.
 
-A customer submits a chip thermal spec. Six agents take it from spec to a manufacturing-ready job, handing off to each other on screen: intake, thermal design, verification (which can reject back to design), process planning, scheduling on a mock factory cell, and QA planning. The job then stops at an **engineer approval gate**. Designs are parameter sets only (no CAD); the released parameter set is what you model in Inventor.
+This is the `test-lab` branch. It repurposes the six-agent cold plate factory demo (still on `master`) into the pipeline for a robot-run test and qualification lab for liquid cooling components.
 
-**Agents decide; tools compute.** Every number on screen comes from deterministic Python in `engineering/` and `factory/`. The verification agent recomputes from the parameter set rather than trusting the design agent. Submit tools reject inconsistent decisions, for example approving a design whose checks failed.
+A component maker submits a test request: the component spec, the target standard, the samples they will send and the date the report is needed. Six agents take it from request to a campaign ready for release, handing off to each other on screen:
+
+1. **Intake** checks the request.
+2. **Campaign Planner** turns spec plus standard into a test campaign: tests, sample sequences, parameters, durations and acceptance criteria.
+3. **Verification** checks the plan against the standard's requirements and can reject it back to the planner.
+4. **Test Procedure** turns the campaign into rig operations and cobot handling tasks.
+5. **Scheduling** books it onto mock rigs, a cobot and partner labs.
+6. **Report (QA)** writes the qualification report.
+
+The job then stops at an **engineer release gate**. Nothing runs until an engineer releases it.
+
+**Honest status.** The rigs and the robot cell are not built. Every rig, booking and partner lab in this demo is mock data, labelled as such. The report is a **simulated dry run**: values come from mock rigs driven by the maker's claimed figures, so the customer sees the report format and the failure-flagging logic before parts ship. Loopwerks is not a certification body and holds no accreditation.
+
+**Agents decide; tools compute.** Every number on screen comes from deterministic Python in `testlab/` and `factory/`. The verifier recomputes from the step list rather than trusting the planner. Submit tools reject inconsistent decisions, for example approving a campaign whose checks failed.
 
 ## Run it
 
@@ -20,97 +33,88 @@ Or by hand: `py -3.12 -m venv .venv`, `.venv\Scripts\pip install -r requirements
 | Mode | When | What runs |
 |---|---|---|
 | **Live** | `ANTHROPIC_API_KEY` set in `.env` | Each agent is a Claude tool-use loop (model from `CLAUDE_MODEL`, default `claude-opus-5-5`). Reasoning summaries and text stream into the feed. |
-| **Scripted replay** | no key, or chosen in the UI | Same orchestrator, same tools and physics. Only the agents' choices and prose are scripted. Works offline with no API cost. The header badge says which mode is on. |
+| **Scripted** | no key, or chosen in the UI | Same orchestrator, same tools, same numbers. Only the agents' choices and prose are scripted. Works offline with no API cost. **Use this on the call if Wi-Fi or the API misbehaves.** |
 
-The mode drop-down next to *Submit* overrides the default per job. **Use scripted mode as the fallback for the call if Wi-Fi or the API misbehaves.**
+**Replay:** every event is stored in SQLite (`factory.db`). Click any job in the Jobs list, or reload the page, and the whole run replays: feed, pipeline, artifacts and the gate.
 
-Settings in `.env` (see `.env.example`):
+Settings in `.env` (see `.env.example`): `CLAUDE_MODEL`, `AGENT_EFFORT` (default `low`), `PLANNER_AGENT_EFFORT` (default `medium`), `ENABLE_FALLBACKS`, `AGENT_MODE`, and `SCRIPTED_STEP_DELAY` (default 0.6 s; a full scripted run takes about a minute).
 
-| Variable | Purpose |
-|---|---|
-| `CLAUDE_MODEL` | Model ID for all agents |
-| `AGENT_EFFORT` | `low` / `medium` / `high` for most agents (default `low`, keeps a live run short) |
-| `DESIGN_AGENT_EFFORT` | Effort for the thermal design agent (default `medium`) |
-| `ENABLE_FALLBACKS` | `1` sends server-side refusal fallbacks (`fallbacks: "default"`) on models that support them; `0` disables. If the API rejects it, the runner retries without it. |
-| `SCRIPTED_STEP_DELAY` | Pacing of scripted mode in seconds (default 0.6; a full run takes about 1 minute) |
+## Demo script (about 3 minutes)
 
-## Demo walkthrough (about 3 minutes)
+1. **Set up.** The **CP-1400** request is pre-loaded. It is a fictional maker's single-phase cold plate: 5 bar maximum operating pressure, 1.5 L/min rated flow in PG25, 1,400 W, 6 mm ports, 5 samples, and the report needed in 8 weeks. The target is `OCP-CP-1.0`. Say: "A component maker wants its own qualification data before paying for certification." Click **Submit to lab**.
+2. **Intake** derives the test conditions:
+   - hydrostatic stage 2 at 15 bar (3x MOP);
+   - a pressure-drop span of 0.375 to 2.25 L/min;
+   - port velocity of 1.33 m/s at 150 % flow, close to the 1.5 m/s erosion limit.
 
-1. The **HX-1200** request is pre-loaded: 1.2 kW accelerator, 55 x 45 mm lid, max case 60 °C, PG25 at 40 °C, 1.8 L/min, ΔP ≤ 15 kPa, 40 pcs. Click **Submit to factory**.
-2. **Intake** checks the spec. Coolant rise and TIM alone fix a case-temperature floor of 48.9 °C, which leaves 11 °C for the plate.
-3. **Thermal design** evaluates a microchannel, a pin fin and a serpentine. Pin fin and serpentine miss the limits. It then sweeps 24 microchannel variants (watch the *Design* tab scatter) and picks the coolest.
-4. **Verification rejects it**, twice, for real reasons:
-   - Round 1: channel depth/width is 15:1, beyond the 12:1 limit of the gang slitting saw (DFM).
-   - Round 2: worst-case ΔP is 16.0 kPa against the 15 kPa limit. The -0.02 mm cutter tolerance matters on 0.20 mm channels.
-   - The design agent turns each finding into a sweep constraint and lands on 0.25/0.20 x 3.0 mm channels: 56.7 °C nominal (58.5 worst case), 5.3 kPa.
-5. **Process planning** builds a 9-op routing: gang-saw channels, FSW lid, post-weld skim, leak test. It runs 64 min/part at about $109/part.
-6. **Scheduling** books lots around the existing jobs and planned downtime (spindle service, FSW calibration, leak rig calibration). Delivery lands a few days before the deadline (business-day shipping; exact slack depends on the day you run it).
-7. **QA** sets the inspection plan: 100% contact-face flatness on CMM, 6 bar proof test, pressure-decay hold time derived from internal volume, and flow and thermal (TTV) acceptance limits taken from the predictions.
-8. **Approve & release to cell.** The tentative bookings become real ones on the Gantt.
+   It also raises two acceptance limits the standard leaves to the customer (leak rate and flatness).
+3. **Campaign Planner** pulls the 18 OCP requirements and the methods list. It puts the bench work on one sample so the cobot can chain it, and spreads the long partner tests (temperature cycling, salt spray, humidity, fluid chemistry) across samples so they run in parallel. To save a sample, it plans on 4 of the 5 (*Campaign* tab shows the lanes).
+4. **Verification rejects it**, for real reasons, even though coverage is 18/18:
+   - pressure drop at only 4 flow points, spanning 33 % to 133 % of rated flow (the standard needs 6 or more points from 25 % to 150 %);
+   - no helium leak test after the shipping temperature cycle (the cycle must be bracketed);
+   - the destructive burst test sits mid-sequence on S3, with two more tests after it.
 
-The *Incomplete / infeasible request* demo shows intake stopping a job. Quantity is missing, and 0.6 L/min at 45 °C inlet cannot hold 52 °C even with a perfect plate.
+   Point out: "The verifier checks the step list itself. It doesn't trust the planner's summary."
+5. **The planner fixes all three.** It adds six points from 25 % to 150 %, a helium test after cycling, and moves burst to its own sample. Verification then passes 35/35.
+6. **Test Procedure** lists every rig operation with its fixture and the cobot tasks: pick, connect, confirm seal by force signature, disconnect, drain. That comes to 9.7 h of bench time and 10 cobot handlings, plus a cost estimate at planning rates (not quotes). Partner labs are flagged as not contracted.
+7. **Scheduling** books the rigs and the cobot around mock work and planned downtime: cobot service, the helium detector not yet on site, a reference-plate check. Rigs run unattended; the cobot only loads and unloads between 06:00 and 22:00 on weekdays. Partner labs drive the critical path. The report lands before the deadline (exact dates depend on the day you run it).
+8. **Report** builds traceability from all 18 requirements to their steps, then runs a **simulated** dry run. It flags thermal resistance at the maker's claim +12 %, over the +10 % criterion, and says what it would do if this were real: repeat on a second sample and check the rig against a reference plate. Partner tests stay *pending*. **Download .md** gives the report file.
+9. **Release campaign to lab.** The tentative bookings become real on the Gantt. Say: "That's the loop: plan from the standard, check it, book robots and rigs, report. Next step is the physical bench."
+
+The second demo request (*QD to UL 4501 only, incomplete*) shows intake stopping a job:
+- UL 4501 methods are not public, so it can't be planned;
+- the maximum operating pressure is missing;
+- only one sample is supplied.
 
 ## Architecture
 
 ```
-app/        FastAPI (REST + /ws event stream), single-page UI (plain JS + hand-rolled SVG charts)
+app/        FastAPI (REST, /ws event stream, /api/jobs/{id}/report.md), single-page UI (plain JS, SVG Gantt)
 agents/     core.py          tool runtime, LiveRunner (Anthropic Messages API, streaming, manual tool loop),
                              ScriptedSession (scripted choices, same tool executor)
-            intake.py, thermal_design.py, verification.py, process_planning.py, scheduling.py, qa.py
+            intake.py, planner.py, verification.py, procedure.py, scheduling.py, report.py
                              one module per agent: system prompt, tools, task builder, scripted policy
-            orchestrator.py  pipeline, design<->verification rework loop (max 3), approval gate
-engineering/                 deterministic models (unit-tested)
-factory/    db.py            SQLite: jobs, event log, machines, bookings (re-seeded relative to today on start)
-            scheduler.py     finite-capacity, shift-aware, lot-based cell scheduler
-tests/                       47 tests: correlations vs hand calcs, scheduler invariants, live loop vs a fake client,
-                             end-to-end pipeline
+            orchestrator.py  pipeline, planner <-> verification rework loop (max 3), release gate
+testlab/    standards.py     requirement catalogues (OCP cold plate summary; UL 4501 marked not plannable)
+            methods.py       test methods, resources (bench, hired, university CMM, partner), durations
+            spec_check.py    intake validation and derived test conditions
+            campaign.py      campaign builder: steps, sample sequences, acceptance criteria
+            verify.py        coverage, parameter and sequence-rule checks
+            procedure.py     rig operations, cobot tasks, cost at planning rates
+            report.py        traceability, simulated dry run, Markdown report
+factory/    db.py            SQLite: jobs, event log, lab resources, bookings (re-seeded relative to today on start)
+            scheduler.py     finite-capacity lab scheduler: rigs 24/7, cobot handling in a supervised window,
+                             sample sequences, partner transit, university CMM hours
+engineering/                 cold plate thermal/hydraulic models from the master branch (kept, still tested)
+tests/                       105 tests
 ```
 
-Every event is persisted, so reloading the page replays the job. Jobs, approval state and bookings survive in `factory.db`. The factory board is re-seeded on each server start so its dates are always current.
+## Where the numbers come from
 
-## Engineering models (`engineering/`)
-
-- **Thermal network** (`thermal_network.py`): T_case = T_in + Q·(R_caloric + R_conv + R_base + R_spreading + R_TIM).
-  - R_caloric = 1/(2·m·cp) adds the coolant rise to the bulk mean.
-  - Spreading uses the Lee, Song, Au & Moran (1995) closed form.
-  - TIM2 is R''/A_source.
-- **Convection** (`convection.py`):
-  - Laminar flow uses Shah & London fully developed rectangular-duct Nu (H1) and fRe.
-  - Turbulent flow uses Gnielinski with the Petukhov friction factor.
-  - Between Re 2300 and 3000 the two are blended linearly, so Nu and f are continuous.
-  - Fin efficiency is tanh(mL)/mL.
-  - Pin fins use Zukauskas staggered banks with a row correction.
-- **Pressure drop** (`pressure_drop.py`):
-  - Darcy-Weisbach for channel friction.
-  - Minor losses: ports and plenums, contraction, Borda-Carnot expansion, 180° bends (K = 2.2).
-  - Pin banks use the Gaddis-Gnielinski drag coefficient.
-- **Verification standard** (`verification.py`):
-  - Thermal worst case: flow -5%, TIM2 +25%, fouling 2e-5 m²K/W.
-  - Hydraulic worst case: flow +5%, channel width -0.02 mm, depth -0.05 mm.
-  - Also checked: erosion velocity limit, heat-source coverage, DFM.
-- **DFM** (`dfm.py`):
-  - Slitting saw: channel ≥ 0.20 mm, depth/width ≤ 12, fin height/thickness ≤ 15.
-  - End-mill limits for pin fins and serpentines.
-  - FSW land ≥ 6 mm; base ≥ 1.0 mm.
-- **Process, QA and spec check** (`process.py`, `qa.py`, `spec_check.py`):
-  - Cycle times come from path length / feed and volume / MRR, with load and tool-change allowances.
-  - QA covers ISO 2859-1 sample sizes and pressure-decay hold time from internal volume and leak spec.
-  - The spec check covers completeness, plausibility and the feasibility floor.
-
-### Known simplifications (be ready for these questions)
-
-- Fully developed laminar Nu ignores entrance-region enhancement, which is conservative for short microchannels. The 4-wall H1 boundary condition is used even though the lid side is nearly adiabatic.
-- The network is 1-D with bulk-mean coolant temperature, so it gives the average case temperature, not a hot-spot map. Next step: a conjugate CFD/FEA check before release.
-- PG25 properties are fits, within about 5% over 10-70 °C. Feeds, rates and stock prices are representative figures, not quotes.
-- Scheduling is non-preemptive per shift window with greedy lot dispatch. It is not an optimiser.
+- **The OCP requirement catalogue** is a planning summary from the research notes (`research/notes/cold_plate_bottlenecks_qualification_capital.md`) and the published PDF. It is not the specification text. Every value must be checked against the specification before a real campaign. The helium leak-rate exponent could not be recovered from the PDF, so that limit comes from the customer.
+- **UL 4501 test methods are not public.** The catalogue marks it as not plannable.
+- **Durations** are planning estimates for the v0 bench. Fluid compatibility is set at 21 days because the ASTM methods run for days to weeks.
+- **Cost rates** (bench £12/h, hired helium detector £20/h, cobot £15/h, CMM £60/h, engineer £40/h) are planning assumptions, not quotes.
+- **Simulated results** use fixed offsets from the maker's claims: pressure drop +4 %, and thermal resistance +12 %, which is chosen to show a flagged failure.
 
 ## Tests
 
 ```
 .venv\Scripts\python -m pytest -q
+.venv\Scripts\python -m scripts.run_pipeline          # headless scripted run of the CP-1400 case
+.venv\Scripts\python -m scripts.run_pipeline bad      # the request intake stops
 ```
 
-## Status / not yet done
+The tests cover:
+- intake rules;
+- the planner's first draft failing for exactly the three intended reasons, and the revision clearing them;
+- every verification rule;
+- procedure invariants;
+- scheduler invariants: no overlaps, sample order, cobot handling inside the supervised window, CMM hours, partner transit, and wall-clock robustness over two weeks of start times;
+- the live tool loop against a fake client;
+- the full pipeline to the gate.
 
-- **The live (Claude) path has not been run against the real API.** No key was available while building. It is tested against a fake client that emits thinking, text, `tool_use`, refusal and fallback-rejection responses. Before the call, put a key in `.env` and do one full live run. Live agents choose their own designs, so the rejection loop is likely but not guaranteed. Scripted mode always shows it.
-- `scripts/sweep_demo_case.py` is the sweep used to pick the demo spec. `scripts/run_pipeline.py [hx1200|bad]` runs the pipeline headless in the terminal.
+## Not yet done
+
+- **The live (Claude) path has never run against the real API.** It is tested against a fake client only. Before the call, put a key in `.env` and do one full live run. Live agents plan their own campaigns, so a rejection is likely but not guaranteed. Scripted mode always shows it.
+- Physical rigs, the cobot integration and partner contracts do not exist yet. The scheduler and the report are built so that real rig data can replace the mock layer.
