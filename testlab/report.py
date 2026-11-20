@@ -40,7 +40,8 @@ def simulate_results(campaign: dict, spec: dict) -> list[dict]:
         elif t == "hydrostatic":
             out.append({**base, "status": "PASS", "value": f"held {3 * mop:g} bar, residual deformation 0.01 mm"})
         elif t == "burst":
-            out.append({**base, "status": "PASS", "value": f"no rupture at {p.get('target_bar')} bar (bench limit)"})
+            out.append({**base, "status": "REPORT", "value": f"no rupture at {p.get('target_bar')} bar (bench pump limit)",
+                        "note": "Acceptance pressure to be confirmed against the specification text."})
         elif t == "pressure_drop":
             claim = spec.get("claimed_dp_kpa_at_rated")
             k = float(claim or 10.0) * (1 + SIM_DP_OFFSET)

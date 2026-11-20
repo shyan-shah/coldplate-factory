@@ -182,7 +182,7 @@
         break;
       }
       case "handoff":
-        sys("handoff", `<b>${AGENTS[p.from].n} → ${AGENTS[p.to].n}</b> · ${fmtText(p.note)}`); break;
+        sys("handoff", `<b>${(AGENTS[p.from] || { n: p.from }).n} → ${(AGENTS[p.to] || { n: p.to }).n}</b> · ${fmtText(p.note)}`); break;
       case "rejection":
         S.loops += 1; setNode("planner", "rejected", "rework #" + S.loops); renderPipeline();
         sys("reject", `<b>↺ Verification rejected ${esc(p.campaign_id)}, back to the Campaign Planner (round ${p.round})</b><ul class="plain">`

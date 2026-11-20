@@ -1,4 +1,5 @@
 """Test-lab engine: intake checks, campaign building, verification rules, procedure and report."""
+import re
 from datetime import date, timedelta
 
 import pytest
@@ -19,7 +20,7 @@ def spec():
 
 
 def failing(v):
-    return {c["check"].split(" (")[0] for c in v["failures"]}
+    return {re.sub(r" \(T\d+\)$", "", c["check"]) for c in v["failures"]}
 
 
 def test_demo_spec_accepted_with_derived_figures():
@@ -62,7 +63,7 @@ def test_first_plan_fails_for_three_real_reasons(spec):
     v = verify_campaign(c, spec)
     assert v["verdict"] == "FAIL" and v["coverage"] == {"covered": 18, "total": 18}
     assert failing(v) == {"R06 Pressure drop flow points", "R06 Pressure drop span",
-                          "SEQ-1 Helium leak brackets shipping cycling on S2", "SEQ-2 Burst is last on S3"}
+                          "SEQ-1 Helium leak brackets shipping cycling on S2", "SEQ-2 (lab rule) Burst is last on S3"}
 
 
 def test_revision_clears_every_finding(spec):
@@ -88,14 +89,37 @@ def test_parameter_and_sample_rules(spec):
     v = verify_campaign(build_campaign({"steps": steps}, spec, "OCP-CP-1.0"), spec)
     f = failing(v)
     for name in ("R02 Pressure decay hold", "R01 Helium dwell", "R03 Hydrostatic stages", "R04 Burst ramp rate",
-                 "R04 Burst target above 3x MOP", "R05 Thermal inlet temperature", "R15 Salt spray duration",
-                 "SEQ-3 Samples used", "R06 Pressure drop: planned"):
+                 "R05 Thermal inlet temperature", "R15 Salt spray duration",
+                 "SEQ-3 (lab rule) Samples used", "R06 Pressure drop: planned"):
         assert name in f, name
 
 
 def test_unknown_test_rejected(spec):
     with pytest.raises(KeyError):
         build_campaign({"steps": [{"sample_id": "S1", "test": "levitation"}]}, spec, "OCP-CP-1.0")
+
+
+def test_unknown_or_missing_params_rejected(spec):
+    with pytest.raises(ValueError, match="unknown params"):
+        build_campaign({"steps": [{"sample_id": "S1", "test": "pressure_decay", "params": {"hold": 15}}]}, spec, "OCP-CP-1.0")
+    with pytest.raises(ValueError, match="flows_lpm"):
+        build_campaign({"steps": [{"sample_id": "S1", "test": "pressure_drop"}]}, spec, "OCP-CP-1.0")
+
+
+def test_methods_list_exposes_param_keys():
+    from testlab.methods import describe_methods
+    m = {x["test"]: x for x in describe_methods()}
+    assert "flows_lpm" in m["pressure_drop"]["params"] and "hold_min" in m["pressure_decay"]["params"]
+
+
+def test_burst_is_report_only_and_lab_rules_labelled(spec):
+    c1 = build_campaign({"steps": first_plan(spec)}, spec, "OCP-CP-1.0")
+    steps, _ = revise(first_plan(spec), verify_campaign(c1, spec)["failures"], spec)
+    c = build_campaign({"steps": steps}, spec, "OCP-CP-1.0")
+    burst = next(r for r in simulate_results(c, spec) if r["test"] == "burst")
+    assert burst["status"] == "REPORT"
+    rules = {r["id"]: r["rule"] for r in OCP_CP["sequence_rules"]}
+    assert "lab rule" in rules["SEQ-2"] and "lab rule" in rules["SEQ-3"]
 
 
 def test_procedure_cobot_only_on_bench(spec):

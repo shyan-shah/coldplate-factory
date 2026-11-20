@@ -51,9 +51,6 @@ def verify_campaign(campaign: dict, spec: dict) -> dict:
         p = s["params"]
         checks.append(_chk(f"R04 Burst ramp rate ({s['step_id']})", p.get("ramp_bar_min"), "1 to 5", "bar/min",
                            _in(p.get("ramp_bar_min", 0), rq["burst"]["params"]["ramp_bar_min"]), "R04"))
-        checks.append(_chk(f"R04 Burst target above 3x MOP ({s['step_id']})", p.get("target_bar"), f">= {3 * mop:g}",
-                           "bar", float(p.get("target_bar", 0)) >= 3 * mop, "R04",
-                           "Bench pump limit is 40 bar" if float(p.get("target_bar", 0)) > 40 else ""))
     for s in by_test.get("thermal_resistance", []):
         t = s["params"].get("inlet_c")
         checks.append(_chk(f"R05 Thermal inlet temperature ({s['step_id']})", t, "45 +/- 2", "degC",
@@ -98,11 +95,11 @@ def verify_campaign(campaign: dict, spec: dict) -> dict:
     for s in steps:
         if s["destructive"]:
             later = seq[s["sample_id"]][seq[s["sample_id"]].index(s["step_id"]) + 1:]
-            checks.append(_chk(f"SEQ-2 {s['name']} is last on {s['sample_id']}", len(later), "0", "tests after",
+            checks.append(_chk(f"SEQ-2 (lab rule) {s['name']} is last on {s['sample_id']}", len(later), "0", "tests after",
                                not later, s["requirement"], "" if not later else
                                f"{s['step_id']} destroys {s['sample_id']} but {', '.join(later)} follow it"))
     supplied = int(spec["samples"])
-    checks.append(_chk("SEQ-3 Samples used", len(seq), f"<= {supplied}", "samples", len(seq) <= supplied))
+    checks.append(_chk("SEQ-3 (lab rule) Samples used", len(seq), f"<= {supplied}", "samples", len(seq) <= supplied))
 
     failures = [c for c in checks if not c["pass"]]
     partner = [s for s in steps if s["where"] == "partner"]

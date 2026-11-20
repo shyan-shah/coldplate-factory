@@ -1,7 +1,7 @@
 """Build a test campaign from planner input: steps, resources, durations and acceptance criteria."""
 from __future__ import annotations
 
-from .methods import METHODS, RESOURCE_KIND, method
+from .methods import METHODS, PARAM_KEYS, RESOURCE_KIND, method
 from .spec_check import velocity_m_s
 from .standards import get_standard, requirement_for_test
 
@@ -18,8 +18,9 @@ def acceptance(test: str, params: dict, spec: dict) -> str:
         return (f"No leak or permanent deformation after {params.get('stage1_min')} min at {mop:g} bar and "
                 f"{params.get('stage2_min')} min at {f * mop:g} bar")
     if test == "burst":
-        return (f"No rupture below {3 * mop:g} bar (3x MOP); ramp {params.get('ramp_bar_min')} bar/min to rupture or "
-                f"{params.get('target_bar')} bar (bench limit)")
+        return (f"Report rupture pressure; ramp {params.get('ramp_bar_min')} bar/min to rupture or "
+                f"{params.get('target_bar')} bar. Acceptance pressure from the spec text ('rupture or 3x minimum proof "
+                "pressure' in our summary): confirm before testing. Bench pump limit 40 bar")
     if test == "thermal_resistance":
         lim = spec.get("claimed_r_th_k_w")
         return (f"R_th <= {1.1 * float(lim):.4f} K/W (maker's claim +10 %, customer criterion)" if lim
@@ -63,7 +64,13 @@ def build_campaign(inp: dict, spec: dict, standard_id: str) -> dict:
             raise ValueError(f"step {i}: sample_id is required")
         if sid not in samples:
             samples.append(sid)
-        params = {**m["defaults"], **(s.get("params") or {})}
+        given = s.get("params") or {}
+        unknown = sorted(set(given) - set(PARAM_KEYS.get(test, {})))
+        if unknown:
+            raise ValueError(f"step {i} ({test}): unknown params {unknown}. Allowed: {sorted(PARAM_KEYS.get(test, {}))}")
+        if test == "pressure_drop" and not given.get("flows_lpm"):
+            raise ValueError(f"step {i}: pressure_drop needs params.flows_lpm, a list of test flows in L/min")
+        params = {**m["defaults"], **given}
         req = requirement_for_test(std, test)
         minutes = float(m["minutes"](params, spec))
         step = {"step_id": f"T{i:02d}", "sample_id": sid, "test": test, "name": m["name"], "params": params,

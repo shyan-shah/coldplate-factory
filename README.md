@@ -35,7 +35,7 @@ Or by hand: `py -3.12 -m venv .venv`, `.venv\Scripts\pip install -r requirements
 | **Live** | `ANTHROPIC_API_KEY` set in `.env` | Each agent is a Claude tool-use loop (model from `CLAUDE_MODEL`, default `claude-opus-5-5`). Reasoning summaries and text stream into the feed. |
 | **Scripted** | no key, or chosen in the UI | Same orchestrator, same tools, same numbers. Only the agents' choices and prose are scripted. Works offline with no API cost. **Use this on the call if Wi-Fi or the API misbehaves.** |
 
-**Replay:** every event is stored in SQLite (`factory.db`). Click any job in the Jobs list, or reload the page, and the whole run replays: feed, pipeline, artifacts and the gate.
+**Replay:** every event is stored in SQLite (`lab.db` on this branch, kept apart from `master`'s `factory.db`). Click any job in the Jobs list, or reload the page, and the whole run replays: feed, pipeline, artifacts and the gate.
 
 Settings in `.env` (see `.env.example`): `CLAUDE_MODEL`, `AGENT_EFFORT` (default `low`), `PLANNER_AGENT_EFFORT` (default `medium`), `ENABLE_FALLBACKS`, `AGENT_MODE`, and `SCRIPTED_STEP_DELAY` (default 0.6 s; a full scripted run takes about a minute).
 
@@ -55,7 +55,7 @@ Settings in `.env` (see `.env.example`): `CLAUDE_MODEL`, `AGENT_EFFORT` (default
    - the destructive burst test sits mid-sequence on S3, with two more tests after it.
 
    Point out: "The verifier checks the step list itself. It doesn't trust the planner's summary."
-5. **The planner fixes all three.** It adds six points from 25 % to 150 %, a helium test after cycling, and moves burst to its own sample. Verification then passes 35/35.
+5. **The planner fixes all three.** It adds six points from 25 % to 150 %, a helium test after cycling, and moves burst to its own sample. Verification then passes 34/34.
 6. **Test Procedure** lists every rig operation with its fixture and the cobot tasks: pick, connect, confirm seal by force signature, disconnect, drain. That comes to 9.7 h of bench time and 10 cobot handlings, plus a cost estimate at planning rates (not quotes). Partner labs are flagged as not contracted.
 7. **Scheduling** books the rigs and the cobot around mock work and planned downtime: cobot service, the helium detector not yet on site, a reference-plate check. Rigs run unattended; the cobot only loads and unloads between 06:00 and 22:00 on weekdays. Partner labs drive the critical path. The report lands before the deadline (exact dates depend on the day you run it).
 8. **Report** builds traceability from all 18 requirements to their steps, then runs a **simulated** dry run. It flags thermal resistance at the maker's claim +12 %, over the +10 % criterion, and says what it would do if this were real: repeat on a second sample and check the rig against a reference plate. Partner tests stay *pending*. **Download .md** gives the report file.
@@ -86,13 +86,14 @@ factory/    db.py            SQLite: jobs, event log, lab resources, bookings (r
             scheduler.py     finite-capacity lab scheduler: rigs 24/7, cobot handling in a supervised window,
                              sample sequences, partner transit, university CMM hours
 engineering/                 cold plate thermal/hydraulic models from the master branch (kept, still tested)
-tests/                       105 tests
+tests/                       108 tests
 ```
 
 ## Where the numbers come from
 
 - **The OCP requirement catalogue** is a planning summary from the research notes (`research/notes/cold_plate_bottlenecks_qualification_capital.md`) and the published PDF. It is not the specification text. Every value must be checked against the specification before a real campaign. The helium leak-rate exponent could not be recovered from the PDF, so that limit comes from the customer.
 - **UL 4501 test methods are not public.** The catalogue marks it as not plannable.
+- **Burst** is report-only. The research summary reads "rupture or 3x minimum proof pressure", which has not been checked against the specification text, so the demo reports the pressure reached rather than a pass/fail. SEQ-2 (destructive test last) and SEQ-3 (samples used) are Loopwerks lab rules, not specification rules, and are labelled as such.
 - **Durations** are planning estimates for the v0 bench. Fluid compatibility is set at 21 days because the ASTM methods run for days to weeks.
 - **Cost rates** (bench £12/h, hired helium detector £20/h, cobot £15/h, CMM £60/h, engineer £40/h) are planning assumptions, not quotes.
 - **Simulated results** use fixed offsets from the maker's claims: pressure drop +4 %, and thermal resistance +12 %, which is chosen to show a flagged failure.

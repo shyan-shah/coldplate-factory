@@ -87,6 +87,21 @@ METHODS: dict[str, dict] = {
 }
 
 
+PARAM_KEYS = {
+    "pressure_decay": {"hold_min": "hold time, min"},
+    "helium_leak": {"dwell_min": "dwell, min"},
+    "hydrostatic": {"stage1_min": "min at MOP", "stage2_min": "min at stage 2", "stage2_factor": "stage 2 pressure / MOP"},
+    "burst": {"ramp_bar_min": "pressure rise, bar/min", "target_bar": "stop pressure if no rupture, bar"},
+    "pressure_drop": {"flows_lpm": "list of test flows, L/min"},
+    "thermal_resistance": {"inlet_c": "inlet temperature, degC", "power_levels": "number of heater power levels"},
+    "retention_force": {"force_n": "force, N", "hold_s": "hold, s"},
+    "op_temp_cycling": {"dwell_h": "dwell at each temperature, h"},
+    "non_op_temp_cycling": {"dwell_h": "dwell at each temperature, h"},
+    "salt_spray": {"hours": "exposure, h"},
+    "humidity": {"hours_each": "dwell at each humidity, h"},
+}
+
+
 def method(test: str) -> dict:
     if test not in METHODS:
         raise KeyError(f"Unknown test '{test}'. Known: {sorted(METHODS)}")
@@ -97,6 +112,6 @@ def describe_methods() -> list[dict]:
     out = []
     for k, m in METHODS.items():
         out.append({"test": k, "name": m["name"], "resource": m["resource"], "where": RESOURCE_KIND[m["resource"]],
-                    "destructive": m["destructive"], "default_params": m["defaults"],
+                    "destructive": m["destructive"], "params": PARAM_KEYS.get(k, {}), "default_params": m["defaults"],
                     "nominal_minutes": round(m["minutes"](m["defaults"], {}), 1), **({"note": m["note"]} if "note" in m else {})})
     return out

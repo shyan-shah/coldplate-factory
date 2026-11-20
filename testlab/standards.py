@@ -32,8 +32,8 @@ OCP_CP = {
                  "No permanent deformation.",
          "params": {"stage1_min": 5, "stage2_min": 2, "stage2_factor": 3.0}},
         {"id": "R04", "name": "Burst (destructive)", "test": "burst",
-         "rule": "To rupture or to the stated burst requirement. Pressure rise 1 to 5 bar/min (ISO 18869). "
-                 "Must be on a sample that is not tested again.",
+         "rule": "Until rupture or 3x minimum proof pressure; pressure rise 1 to 5 bar/min (ISO 18869). The acceptance "
+                 "pressure is report-only here until checked against the specification text.",
          "params": {"ramp_bar_min": [1, 5]}},
         {"id": "R05", "name": "Thermal resistance", "test": "thermal_resistance",
          "rule": "On a TTV or processor stack with inlet at 45 +/- 2 degC.", "params": {"inlet_c": [43, 47]}},
@@ -65,10 +65,12 @@ OCP_CP = {
          "rule": "Ultrasonic flush; no particulate over 50 um.", "params": {}},
     ],
     "sequence_rules": [
-        {"id": "SEQ-1", "rule": "Helium leak test on the same sample before and after non-operational temperature "
-                                "cycling (R12)."},
-        {"id": "SEQ-2", "rule": "A destructive test must be the last test on its sample."},
-        {"id": "SEQ-3", "rule": "The campaign may not use more samples than the customer supplies."},
+        {"id": "SEQ-1", "rule": "From the specification summary: helium leak test on the same sample before and after "
+                                "non-operational temperature cycling (R12)."},
+        {"id": "SEQ-2", "rule": "Loopwerks lab rule (not from the specification): a destructive test must be the last "
+                                "test on its sample."},
+        {"id": "SEQ-3", "rule": "Loopwerks lab rule (not from the specification): the campaign may not use more samples "
+                                "than the customer supplies."},
     ],
 }
 

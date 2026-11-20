@@ -8,7 +8,8 @@ import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
-DB_PATH = Path(os.environ.get("FACTORY_DB", Path(__file__).resolve().parent.parent / "factory.db"))
+# Own file on this branch so it never mixes with the cold plate demo's factory.db on master.
+DB_PATH = Path(os.environ.get("FACTORY_DB", Path(__file__).resolve().parent.parent / "lab.db"))
 _lock = threading.RLock()
 
 SCHEMA = """
@@ -69,7 +70,8 @@ def seed_factory(now: datetime | None = None) -> None:
     day0 = now.replace(hour=0)
     with _lock:
         c = conn()
-        c.execute("DELETE FROM bookings")  # clean factory board on every launch
+        c.execute("DELETE FROM bookings")  # clean lab board on every launch
+        c.execute("DELETE FROM machines")
         for m in MACHINES:
             c.execute("INSERT OR REPLACE INTO machines VALUES (?,?,?,?,?)", m)
 
